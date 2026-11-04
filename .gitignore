@@ -1,0 +1,21 @@
+# Segredos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+# Node / build
+node_modules/
+dist/
+.next/
+coverage/
+# Prisma / DB local
+*.db
+# SO / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+# Arquivos de clientes
+uploads/
