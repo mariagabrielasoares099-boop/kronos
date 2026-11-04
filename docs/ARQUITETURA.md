@@ -4,7 +4,7 @@ Aplicação web **multi-tenant** em nuvem, banco compartilhado isolado por `tena
 
 | Camada | Escolha |
 |---|---|
-| Front-end | Next.js + TypeScript + Tailwind (portal e painel) |
+| Front-end | Python: FastAPI + Jinja2 + HTMX, renderizado no servidor (portal e painel), consumindo a API NestJS. Ver [ADR-002](adr/ADR-002-frontend-python.md) |
 | Back-end | NestJS (Node.js + TypeScript), organizado por módulos |
 | Banco | PostgreSQL + Prisma, RLS |
 | Arquivos | S3 compatível (R2/MinIO), privado, links assinados |
@@ -14,4 +14,4 @@ Aplicação web **multi-tenant** em nuvem, banco compartilhado isolado por `tena
 
 Modelo canônico de admissão baseado no evento **S-2200** do eSocial; cada ERP é um conector que traduz esse modelo. Quem transmite ao eSocial é o ERP do cliente.
 
-Estrutura planejada do monorepo: `apps/web`, `apps/api`, `packages/connectors`, `apps/erp-agent`.
+Estrutura planejada do monorepo: `apps/web` (Python), `apps/api` (NestJS), `packages/connectors`, `apps/erp-agent`.

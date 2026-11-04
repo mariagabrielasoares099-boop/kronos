@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Painel do RH - KRONOS{% endblock %}
+{% block content %}
+<h1>Fila de chamados</h1>
+<div class="kanban">
+  {% for st, itens in colunas.items() %}
+  <section class="col">
+    <h2>{{ labels[st] }} <small>({{ itens|length }})</small></h2>
+    {% for c in itens %}
+    <a class="ticket" href="/chamado/{{ c.protocolo }}">
+      <strong>{{ c.protocolo }}</strong><br>{{ c.nome }}
+    </a>
+    {% endfor %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

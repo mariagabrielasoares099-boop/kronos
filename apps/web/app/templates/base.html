@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}KRONOS{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+  {% if demo %}<div class="demo">Modo demonstracao: dados ficticios, sem autenticacao.</div>{% endif %}
+  <header class="top"><a href="/" class="brand">KRONOS</a>
+    {% if demo %}<a href="/painel">Painel do RH</a>{% endif %}
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  <footer>Seus dados sao tratados conforme a LGPD. A empresa e a controladora.</footer>
+</body>
+</html>

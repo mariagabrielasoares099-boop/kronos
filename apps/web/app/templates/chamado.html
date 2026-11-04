@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Chamado {{ chamado.protocolo }} - KRONOS{% endblock %}
+{% block content %}
+<h1>Chamado {{ chamado.protocolo }}</h1>
+<p>Vaga: {{ vaga.titulo if vaga else '-' }}</p>
+<p class="status">Situacao atual: <strong>{{ labels[chamado.status] }}</strong></p>
+{% if chamado.status == 'AGUARDANDO_CANDIDATO' %}
+  <p class="alerta">Ha documentos pendentes. Envie-os para continuar.</p>
+{% endif %}
+<h2>Historico</h2>
+<ol class="timeline">
+  {% for st, motivo in chamado.historico %}
+  <li><strong>{{ labels[st] }}</strong> &mdash; {{ motivo }}</li>
+  {% endfor %}
+</ol>
+{% endblock %}
