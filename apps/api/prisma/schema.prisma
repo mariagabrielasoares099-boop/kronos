@@ -1,0 +1,152 @@
+// Modelo central (Fase 1). Toda tabela de negocio carrega tenant_id e tem RLS (ver migrations/rls).
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  nome      String
+  cnpj      String?
+  plano     String   @default("trial")
+  config    Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  companies  Company[]
+  users      User[]
+  jobs       Job[]
+  candidates Candidate[]
+  tickets    Ticket[]
+
+  @@map("tenants")
+}
+
+model Company {
+  id          String  @id @default(uuid(7)) @db.Uuid
+  tenantId    String  @map("tenant_id") @db.Uuid
+  cnpj        String
+  razaoSocial String  @map("razao_social")
+  codigoErp   String? @map("codigo_erp")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  jobs   Job[]
+
+  @@unique([tenantId, cnpj])
+  @@index([tenantId])
+  @@map("companies")
+}
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  nome         String
+  email        String
+  role         String // CHECK em rls.sql
+  passwordHash String   @map("password_hash")
+  totpSecret   String?  @map("totp_secret") // criptografado em repouso
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model Job {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  titulo     String
+  cargoErpId String?  @map("cargo_erp_id")
+  fluxo      Json     @default("{}") // etapas opcionais habilitadas, SLA por etapa, nota de corte
+  checklist  Json     @default("[]") // documentos exigidos
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  company Company  @relation(fields: [companyId], references: [id])
+  tickets Ticket[]
+
+  @@index([tenantId, companyId])
+  @@map("jobs")
+}
+
+model Candidate {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  cpf                String
+  nome               String
+  email              String
+  telefone           String?
+  consentimentoLgpd  DateTime? @map("consentimento_lgpd")
+  anonimizadoEm      DateTime? @map("anonimizado_em")
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  tickets Ticket[]
+
+  @@unique([tenantId, cpf])
+  @@map("candidates")
+}
+
+model Ticket {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  tenantId    String       @map("tenant_id") @db.Uuid
+  protocolo   String
+  jobId       String       @map("job_id") @db.Uuid
+  candidateId String       @map("candidate_id") @db.Uuid
+  status      String       @default("TRIAGEM") // CHECK em rls.sql
+  responsavel String?      @db.Uuid
+  prazoSla    DateTime?    @map("prazo_sla")
+  erpRef      String?      @map("erp_ref")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id])
+  job       Job           @relation(fields: [jobId], references: [id])
+  candidate Candidate     @relation(fields: [candidateId], references: [id])
+  events    TicketEvent[]
+  messages  Message[]
+
+  @@unique([tenantId, protocolo])
+  @@index([tenantId, status])
+  @@index([jobId])
+  @@index([candidateId])
+  @@map("tickets")
+}
+
+/// Trilha de auditoria: somente insercoes (garantido por trigger na migration RLS).
+model TicketEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  tipo      String
+  autor     String?
+  de        String?
+  para      String?
+  motivo    String?
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_events")
+}
+
+model Message {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  autor     String
+  canal     String
+  texto     String
+  interno   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("messages")
+}
