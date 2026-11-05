@@ -2,8 +2,70 @@
 
 ATS em que **cada candidato é um chamado** com protocolo único (ex.: `ADM-2026-000123`), da candidatura até a admissão concluída na folha, integrado ao ERP de folha do cliente (Fortes, Domínio, Alterdata, Totvs, Senior…) por **conectores**.
 
+> Projeto de demonstração, sem comprador: usa apenas serviços gratuitos ou locais.
+
+## O problema
+O recrutamento acontece num lugar (Gupy, planilha, e-mail) e a admissão em outro (WhatsApp para pedir documentos, digitação manual na folha). O RH digita tudo duas vezes, perde documentos e não sabe em que etapa cada pessoa está.
+
+## A solução
+1. **Candidato**: se candidata, acompanha o chamado e envia documentos pelo celular.
+2. **RH**: trabalha numa fila de chamados com status, responsável e prazo (SLA); aprova ou recusa documentos com motivo.
+3. **Admissão**: aprovado o candidato, os dados validados seguem para o ERP do cliente.
+
+Leitura rápida para a equipe: [`docs/RESUMO.md`](docs/RESUMO.md).
+
+## Stack
+| Camada | Tecnologia |
+|---|---|
+| Front-end | Python: FastAPI + Jinja2 + HTMX |
+| Back-end | NestJS (Node.js + TypeScript) |
+| Banco | PostgreSQL + Prisma, com Row Level Security |
+| Fila / cache | Redis (BullMQ) |
+
+Detalhes e decisões: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) e [`docs/adr/`](docs/adr).
+
+## Estrutura do repositório
+```
+apps/
+  api/   API NestJS: domínio do chamado, modelo de dados, health check
+  web/   Portal e painel (FastAPI + Jinja2 + HTMX)
+docs/    Escopo, arquitetura, dados, módulos e ADRs
+docker-compose.yml   PostgreSQL e Redis para desenvolvimento local
+```
+
+## Como rodar localmente
+
+Pré-requisitos: Node.js, Python 3 e Docker.
+
+```bash
+# 1. Variáveis de ambiente
+cp .env.example .env
+
+# 2. Banco e Redis
+docker compose up -d
+
+# 3. API (porta 3000)
+cd apps/api
+npm install
+npm run start:dev
+
+# 4. Web (em outro terminal)
+cd apps/web
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+O front roda em **modo demo** por padrão (`DEMO_MODE=true`), sem precisar da API. Fora do modo demo, `API_BASE_URL` e `SESSION_SECRET` (32+ caracteres) são obrigatórios.
+
+## Testes
+```bash
+cd apps/api && npm test        # unitários (Vitest)
+cd apps/web && pytest          # front-end
+```
+
+## Documentação
 - Escopo completo: [`docs/escopo-produto.pdf`](docs/escopo-produto.pdf)
-- Arquitetura e stack: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)
+- Modelo de dados: [`docs/DADOS.md`](docs/DADOS.md)
 - Módulos: [`docs/modulos/`](docs/modulos/README.md)
 - Os 10 passos (checklist transversal): [`docs/PASSOS.md`](docs/PASSOS.md)
 - Segurança: [`SECURITY.md`](SECURITY.md)
@@ -13,4 +75,8 @@ ATS em que **cada candidato é um chamado** com protocolo único (ex.: `ADM-2026
 2. **Vendável**: planos/cobrança, WhatsApp, testes, assinatura digital, 1º conector ERP, relatórios.
 3. **Escala**: parcerias/conectores de ERP, IA (OCR/triagem), API pública e webhooks.
 
-Cada módulo tem sua milestone e issues no GitHub, e cada um mapeia os 10 passos.
+## Equipe
+<!-- Preencher: nomes e papéis -->
+
+## Requisitos da disciplina
+<!-- Preencher com as especificações do professor -->
