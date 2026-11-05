@@ -32,6 +32,7 @@ def create_app(settings: Settings | None = None, gateway: Gateway | None = None)
         return {"status": "ok"}
 
     @app.get("/", response_class=HTMLResponse)
+    @app.get("/vagas", response_class=HTMLResponse)
     def vagas(request: Request):
         return render(request, "vagas.html", vagas=gw.listar_vagas())
 

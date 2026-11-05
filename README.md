@@ -57,11 +57,13 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-> Se a porta 5432 já estiver em uso (outro Postgres local), troque o mapeamento em `docker-compose.yml` (ex.: `"5433:5432"`) e ajuste a porta no `DATABASE_URL`.
+> Se a porta 5432 já estiver em uso (outro Postgres local), suba com outra porta: `POSTGRES_PORT=5433 docker compose up -d` (Redis: `REDIS_PORT`) e ajuste a porta no `DATABASE_URL`.
+
+Atalhos na raiz (`package.json`): `npm run db:up`, `dev:api`, `dev:web`, `test`.
 
 Verificação: `GET http://localhost:3000/health` retorna `{"status":"ok"}`.
 
-O front roda em **modo demo** por padrão (`DEMO_MODE=true`), sem precisar da API. Fora do modo demo, `API_BASE_URL` e `SESSION_SECRET` (32+ caracteres) são obrigatórios.
+O front roda em **modo demo** (rotas `/`, `/vagas`, `/painel`) por padrão (`DEMO_MODE=true`), sem precisar da API. Fora do modo demo, `API_BASE_URL` e `SESSION_SECRET` (32+ caracteres) são obrigatórios.
 
 ## Testes
 ```bash

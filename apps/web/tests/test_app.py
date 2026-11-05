@@ -78,3 +78,9 @@ def test_config_producao_exige_segredos():
     with pytest.raises(RuntimeError):
         load_settings({"DEMO_MODE": "false"})
     assert load_settings({"DEMO_MODE": "false", "SESSION_SECRET": "s" * 32, "API_BASE_URL": "http://api"}).demo_mode is False
+
+
+def test_lista_de_vagas_em_vagas_e_na_raiz():
+    c = make()
+    assert c.get("/vagas").status_code == 200
+    assert c.get("/vagas").text == c.get("/").text
