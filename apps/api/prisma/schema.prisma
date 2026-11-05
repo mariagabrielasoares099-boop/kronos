@@ -1,4 +1,4 @@
-// Modelo central (Fase 1). Toda tabela de negocio carrega tenant_id e tem RLS (ver migrations/rls).
+// Modelo central (Fase 1). Toda tabela de negocio carrega tenant_id e tem RLS (ver prisma/migrations/*_rls_roles).
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -14,7 +14,7 @@ model Tenant {
   cnpj      String?
   plano     String   @default("trial")
   config    Json     @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   companies  Company[]
   users      User[]
@@ -36,6 +36,7 @@ model Company {
   jobs   Job[]
 
   @@unique([tenantId, cnpj])
+  @@unique([tenantId, id])
   @@index([tenantId])
   @@map("companies")
 }
@@ -48,7 +49,7 @@ model User {
   role         String // CHECK em rls.sql
   passwordHash String   @map("password_hash")
   totpSecret   String?  @map("totp_secret") // criptografado em repouso
-  createdAt    DateTime @default(now()) @map("created_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -64,52 +65,55 @@ model Job {
   cargoErpId String?  @map("cargo_erp_id")
   fluxo      Json     @default("{}") // etapas opcionais habilitadas, SLA por etapa, nota de corte
   checklist  Json     @default("[]") // documentos exigidos
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id])
-  company Company  @relation(fields: [companyId], references: [id])
+  company Company  @relation(fields: [tenantId, companyId], references: [tenantId, id])
   tickets Ticket[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, companyId])
   @@map("jobs")
 }
 
 model Candidate {
-  id                 String    @id @default(uuid(7)) @db.Uuid
-  tenantId           String    @map("tenant_id") @db.Uuid
-  cpf                String
-  nome               String
-  email              String
-  telefone           String?
-  consentimentoLgpd  DateTime? @map("consentimento_lgpd")
-  anonimizadoEm      DateTime? @map("anonimizado_em")
+  id                String    @id @default(uuid(7)) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  cpf               String
+  nome              String
+  email             String
+  telefone          String?
+  consentimentoLgpd DateTime? @map("consentimento_lgpd") @db.Timestamptz(3)
+  anonimizadoEm     DateTime? @map("anonimizado_em") @db.Timestamptz(3)
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id])
   tickets Ticket[]
 
   @@unique([tenantId, cpf])
+  @@unique([tenantId, id])
   @@map("candidates")
 }
 
 model Ticket {
-  id          String       @id @default(uuid(7)) @db.Uuid
-  tenantId    String       @map("tenant_id") @db.Uuid
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
   protocolo   String
-  jobId       String       @map("job_id") @db.Uuid
-  candidateId String       @map("candidate_id") @db.Uuid
-  status      String       @default("TRIAGEM") // CHECK em rls.sql
-  responsavel String?      @db.Uuid
-  prazoSla    DateTime?    @map("prazo_sla")
-  erpRef      String?      @map("erp_ref")
-  createdAt   DateTime     @default(now()) @map("created_at")
+  jobId       String    @map("job_id") @db.Uuid
+  candidateId String    @map("candidate_id") @db.Uuid
+  status      String    @default("TRIAGEM") // CHECK em rls.sql
+  responsavel String?   @db.Uuid
+  prazoSla    DateTime? @map("prazo_sla") @db.Timestamptz(3)
+  erpRef      String?   @map("erp_ref")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant    Tenant        @relation(fields: [tenantId], references: [id])
-  job       Job           @relation(fields: [jobId], references: [id])
-  candidate Candidate     @relation(fields: [candidateId], references: [id])
+  job       Job           @relation(fields: [tenantId, jobId], references: [tenantId, id])
+  candidate Candidate     @relation(fields: [tenantId, candidateId], references: [tenantId, id])
   events    TicketEvent[]
   messages  Message[]
 
   @@unique([tenantId, protocolo])
+  @@unique([tenantId, id])
   @@index([tenantId, status])
   @@index([jobId])
   @@index([candidateId])
@@ -127,9 +131,9 @@ model TicketEvent {
   para      String?
   motivo    String?
   payload   Json     @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  ticket Ticket @relation(fields: [ticketId], references: [id])
+  ticket Ticket @relation(fields: [tenantId, ticketId], references: [tenantId, id])
 
   @@index([ticketId, createdAt])
   @@map("ticket_events")
@@ -143,9 +147,9 @@ model Message {
   canal     String
   texto     String
   interno   Boolean  @default(false)
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  ticket Ticket @relation(fields: [ticketId], references: [id])
+  ticket Ticket @relation(fields: [tenantId, ticketId], references: [tenantId, id])
 
   @@index([ticketId, createdAt])
   @@map("messages")

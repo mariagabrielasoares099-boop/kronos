@@ -16,6 +16,15 @@ BEGIN
   END LOOP;
 END $$;
 
+-- tenants: cada tenant so enxerga a propria linha (id = tenant da transacao).
+-- Criar/remover tenant e tarefa de provisionamento (kronos_migrator), nao da aplicacao.
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON tenants;
+CREATE POLICY tenant_isolation ON tenants
+  USING (id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK (id = NULLIF(current_setting('app.tenant_id', true), '')::uuid);
+
 -- ticket_events e append-only (trilha de auditoria).
 CREATE OR REPLACE FUNCTION forbid_event_mutation() RETURNS trigger AS $$
 BEGIN
@@ -47,6 +56,19 @@ ALTER TABLE messages ADD CONSTRAINT messages_canal_check CHECK (canal IN ('EMAIL
 CREATE INDEX IF NOT EXISTS tickets_sla_aberto_idx ON tickets (tenant_id, prazo_sla)
   WHERE status NOT IN ('ADMITIDO','REPROVADO');
 
--- Papeis: a aplicacao nao pode alterar a trilha nem dar TRUNCATE (trigger de linha nao pega TRUNCATE).
--- Executar apos criar o papel kronos_app (fora desta migration, por ambiente):
--- REVOKE UPDATE, DELETE, TRUNCATE ON ticket_events FROM kronos_app;
+
+-- Papeis (sem login por padrao; senha definida por ambiente fora do repositorio).
+-- kronos_app: usado pela API. Sem BYPASSRLS, nao e dono das tabelas.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kronos_app') THEN
+    CREATE ROLE kronos_app NOLOGIN NOBYPASSRLS;
+  END IF;
+END $$;
+
+GRANT USAGE ON SCHEMA public TO kronos_app;
+GRANT SELECT, UPDATE ON tenants TO kronos_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON companies, users, jobs, candidates, tickets, messages TO kronos_app;
+-- Trilha de auditoria: so ler e inserir (trigger cobre linha; REVOKE cobre TRUNCATE).
+GRANT SELECT, INSERT ON ticket_events TO kronos_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON ticket_events FROM kronos_app;

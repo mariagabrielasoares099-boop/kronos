@@ -167,10 +167,18 @@ Premissas a validar com o piloto; abaixo de dezenas de milhões de linhas não h
 | Retenção | Candidatos reprovados/desistentes: prazo configurável por tenant, depois anonimização (`anonimizado_em`); chamados admitidos seguem a guarda trabalhista definida com o jurídico |
 | Backup | Diário, retenção a definir, em região Brasil. **Data do último treino de restauração: nunca realizado** (obrigatório antes do primeiro cliente pagante) |
 
+## Migrations
+
+| Migration | Conteúdo |
+|---|---|
+| `20261105000000_init` | Tabelas, uniques e índices gerados do `schema.prisma` (instantes em `timestamptz(3)`). FKs compostas `(tenant_id, id)` em jobs, tickets, ticket_events e messages: referência entre tenants é recusada pelo banco |
+| `20261105000100_rls_roles` | RLS `FORCE` com política `tenant_isolation`, trigger append-only, CHECKs, índice parcial de SLA, papel `kronos_app` (sem BYPASSRLS) e `REVOKE UPDATE, DELETE, TRUNCATE` em `ticket_events` |
+
+Teste de isolamento: `apps/api/prisma/tests/rls_isolation.sql` (rodar num banco migrado; faz ROLLBACK). `id` é gerado pelo Prisma (UUID v7 no cliente), sem default no banco. `tenants` tem RLS pela própria `id`; o `kronos_app` só faz SELECT e UPDATE nela (criar tenant é provisionamento, fora da aplicação). `kronos_migrator` e a senha do `kronos_app` ficam por ambiente, fora do repositório.
+
 ## Perguntas em aberto
 
 - Nomes e ordem exatos dos 10 status: conferir com o diagrama do PDF (era imagem) e ajustar o `CHECK` e `ticket-status.ts` juntos.
 - Tabelas ainda não modeladas: `document_types`, `documents`, `admission_data`, `erp_connections`, `erp_syncs`, `erp_lookups`, `tests*`, `signature_requests`, `contract_templates`, `uniform_*`, contador de protocolo. Entram em migrations próprias por módulo.
-- FKs compostas `(tenant_id, id)` para impedir referência cruzada entre tenants (o RLS filtra linhas, mas não impede um `job_id` de outro tenant). Decidir antes da primeira migration.
 - Prazo de retenção da guarda de documentos admissionais (jurídico).
 - Meta de RPO/RTO do backup.
