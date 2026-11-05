@@ -40,11 +40,13 @@ Pré-requisitos: Node.js, Python 3 e Docker.
 ```bash
 # 1. Variáveis de ambiente
 cp .env.example .env
+#    Edite o .env: JWT_SECRET e ENCRYPTION_KEY precisam ter 32+ caracteres,
+#    senão a API não sobe. O usuário/senha do banco local estão no docker-compose.yml.
 
 # 2. Banco e Redis
 docker compose up -d
 
-# 3. API (porta 3000)
+# 3. API (porta 3000; a primeira compilação pode demorar)
 cd apps/api
 npm install
 npm run start:dev
@@ -55,12 +57,16 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+> Se a porta 5432 já estiver em uso (outro Postgres local), troque o mapeamento em `docker-compose.yml` (ex.: `"5433:5432"`) e ajuste a porta no `DATABASE_URL`.
+
+Verificação: `GET http://localhost:3000/health` retorna `{"status":"ok"}`.
+
 O front roda em **modo demo** por padrão (`DEMO_MODE=true`), sem precisar da API. Fora do modo demo, `API_BASE_URL` e `SESSION_SECRET` (32+ caracteres) são obrigatórios.
 
 ## Testes
 ```bash
 cd apps/api && npm test        # unitários (Vitest)
-cd apps/web && pytest          # front-end
+cd apps/web && pip install pytest && pytest   # front-end
 ```
 
 ## Documentação
