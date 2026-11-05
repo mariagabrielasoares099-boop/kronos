@@ -40,8 +40,10 @@ Pré-requisitos: Node.js, Python 3 e Docker.
 ```bash
 # 1. Variáveis de ambiente
 cp .env.example .env
-#    Edite o .env: JWT_SECRET e ENCRYPTION_KEY precisam ter 32+ caracteres,
-#    senão a API não sobe. O usuário/senha do banco local estão no docker-compose.yml.
+cp .env.example apps/api/.env
+#    O Compose lê o .env da raiz; a API lê apps/api/.env.
+#    Edite apps/api/.env: configure DATABASE_URL com as credenciais/porta do
+#    docker-compose.yml e troque JWT_SECRET e ENCRYPTION_KEY por valores de 32+ caracteres.
 
 # 2. Banco e Redis
 docker compose up -d
@@ -57,7 +59,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-> Se a porta 5432 já estiver em uso (outro Postgres local), suba com outra porta: `POSTGRES_PORT=5433 docker compose up -d` (Redis: `REDIS_PORT`) e ajuste a porta no `DATABASE_URL`.
+> Se a porta 5432 já estiver em uso, em Bash use `POSTGRES_PORT=5433 docker compose up -d`; no PowerShell use `$env:POSTGRES_PORT = "5433"; docker compose up -d`. Para Redis, use `REDIS_PORT` (Bash) ou `$env:REDIS_PORT` (PowerShell). Ao mudar a porta, atualize a `DATABASE_URL` em `apps/api/.env`.
 
 Atalhos na raiz (`package.json`): `npm run db:up`, `dev:api`, `dev:web`, `test`.
 
