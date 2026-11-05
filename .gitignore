@@ -19,3 +19,9 @@ Thumbs.db
 .vscode/
 # Arquivos de clientes
 uploads/
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc

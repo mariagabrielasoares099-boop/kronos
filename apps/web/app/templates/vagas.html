@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Vagas - KRONOS{% endblock %}
+{% block content %}
+<h1>Vagas abertas</h1>
+<ul class="cards">
+  {% for v in vagas %}
+  <li class="card">
+    <h2><a href="/vagas/{{ v.id }}">{{ v.titulo }}</a></h2>
+    <p>{{ v.empresa }} &middot; {{ v.local }}</p>
+  </li>
+  {% else %}<li>Nenhuma vaga aberta no momento.</li>{% endfor %}
+</ul>
+{% endblock %}

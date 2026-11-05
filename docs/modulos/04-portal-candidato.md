@@ -6,7 +6,7 @@ Candidatura com currículo, acompanhamento do chamado, envio de documentos pelo 
 
 ## Entregas
 
-- [ ] Next.js + Tailwind, mobile first
+- [ ] FastAPI + Jinja2 + HTMX (apps/web), mobile first
 - [ ] Candidatura com aceite de consentimento LGPD
 - [ ] Acompanhamento e pendências do chamado
 - [ ] Download/exclusão dos próprios dados

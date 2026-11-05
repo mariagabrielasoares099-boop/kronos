@@ -1,0 +1,14 @@
+{
+  "name": "kronos",
+  "private": true,
+  "description": "KRONOS: ATS + Admissão. Atalhos do monorepo (cada app tem suas próprias dependências).",
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "dev:api": "npm --prefix apps/api run start:dev",
+    "dev:web": "cd apps/web && python -m uvicorn app.main:app --reload",
+    "test:api": "npm --prefix apps/api test",
+    "test:web": "cd apps/web && python -m pytest",
+    "test": "npm run test:api && npm run test:web"
+  }
+}
