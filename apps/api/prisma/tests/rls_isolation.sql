@@ -1,5 +1,6 @@
 -- Teste de isolamento entre tenants. Rodar como superusuario/migrator num banco ja migrado.
 -- Falha (RAISE EXCEPTION) se qualquer garantia for violada. Faz ROLLBACK ao final.
+\set ON_ERROR_STOP on
 BEGIN;
 
 INSERT INTO tenants (id, nome) VALUES
@@ -9,7 +10,7 @@ INSERT INTO tenants (id, nome) VALUES
 SET LOCAL ROLE kronos_app;
 
 DO $$
-DECLARE n int; ok boolean;
+DECLARE n int;
 BEGIN
   -- Tenant A cria dados
   PERFORM set_config('app.tenant_id', '00000000-0000-0000-0000-00000000000a', true);
@@ -55,6 +56,21 @@ BEGIN
   PERFORM set_config('app.tenant_id', '00000000-0000-0000-0000-00000000000a', true);
   SELECT count(*) INTO n FROM companies; IF n <> 1 THEN RAISE EXCEPTION 'A perdeu seus dados: %', n; END IF;
 
+  -- Plano e identidade sao geridos pelo provisionamento.
+  BEGIN
+    UPDATE tenants SET plano = 'enterprise';
+    RAISE EXCEPTION 'app alterou o plano';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE tenants SET id = gen_random_uuid();
+    RAISE EXCEPTION 'app alterou a identidade do tenant';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE tenants SET nome = 'Tenant A atualizado';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'app nao atualizou nome do proprio tenant'; END IF;
+
   -- 6. Trilha append-only: kronos_app nao altera/apaga eventos
   INSERT INTO jobs (id, tenant_id, company_id, titulo)
     VALUES ('00000000-0000-0000-0000-0000000000a3','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000000a1','Vaga');
@@ -70,6 +86,22 @@ BEGIN
     TRUNCATE ticket_events; RAISE EXCEPTION 'TRUNCATE em ticket_events permitido';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
+
+  BEGIN
+    DELETE FROM ticket_events; RAISE EXCEPTION 'DELETE em ticket_events permitido';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+
+  -- FKs devem rejeitar referencias cruzadas mesmo com tenant_id proprio.
+  PERFORM set_config('app.tenant_id', '00000000-0000-0000-0000-00000000000b', true);
+  BEGIN
+    INSERT INTO jobs (id, tenant_id, company_id, titulo)
+      VALUES (gen_random_uuid(), '00000000-0000-0000-0000-00000000000b',
+              '00000000-0000-0000-0000-0000000000a1', 'Referencia cruzada');
+    RAISE EXCEPTION 'FK permitiu empresa de outro tenant';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  PERFORM set_config('app.tenant_id', '00000000-0000-0000-0000-00000000000a', true);
 
   -- 7. CHECKs de dominio
   BEGIN

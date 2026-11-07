@@ -173,6 +173,9 @@ Premissas a validar com o piloto; abaixo de dezenas de milhões de linhas não h
 |---|---|
 | `20261105000000_init` | Tabelas, uniques e índices gerados do `schema.prisma` (instantes em `timestamptz(3)`). FKs compostas `(tenant_id, id)` em jobs, tickets, ticket_events e messages: referência entre tenants é recusada pelo banco |
 | `20261105000100_rls_roles` | RLS `FORCE` com política `tenant_isolation`, trigger append-only, CHECKs, índice parcial de SLA, papel `kronos_app` (sem BYPASSRLS) e `REVOKE UPDATE, DELETE, TRUNCATE` em `ticket_events` |
+| `20261107000000_tenant_update_permissions` | Restringe UPDATE de `tenants` a `nome`, `cnpj` e `config`; plano e identidade ficam no provisionamento |
+
+Execute o teste com `psql -f apps/api/prisma/tests/rls_isolation.sql` usando uma conexão administrativa de desenvolvimento com todas as migrations aplicadas. O script habilita `ON_ERROR_STOP`: qualquer erro encerra o processo com falha e a conexão desfaz a transação. Inclui restrições de plano/identidade, DELETE de eventos e rejeição de referência a empresa de outro tenant.
 
 Teste de isolamento: `apps/api/prisma/tests/rls_isolation.sql` (rodar num banco migrado; faz ROLLBACK). `id` é gerado pelo Prisma (UUID v7 no cliente), sem default no banco. `tenants` tem RLS pela própria `id`; o `kronos_app` só faz SELECT e UPDATE nela (criar tenant é provisionamento, fora da aplicação). `kronos_migrator` e a senha do `kronos_app` ficam por ambiente, fora do repositório.
 
