@@ -103,6 +103,42 @@ BEGIN
   END;
   PERFORM set_config('app.tenant_id', '00000000-0000-0000-0000-00000000000a', true);
 
+  -- 6b. Documentos: isolamento, imutabilidade dos metadados e regra do motivo.
+  INSERT INTO documents (id, tenant_id, ticket_id, tipo, chave_storage, mime, tamanho_bytes, sha256)
+    VALUES ('00000000-0000-0000-0000-0000000000d1','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000000a4',
+            'RG','00000000-0000-0000-0000-00000000000a/00000000-0000-0000-0000-0000000000f1','image/jpeg',10, repeat('a',64));
+  BEGIN
+    UPDATE documents SET sha256 = repeat('b',64); RAISE EXCEPTION 'app alterou metadados do documento';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    DELETE FROM documents; RAISE EXCEPTION 'DELETE em documents permitido';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE documents SET status = 'RECUSADO'; RAISE EXCEPTION 'recusa sem motivo aceita';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  UPDATE documents SET status = 'RECUSADO', motivo = 'ilegivel'; GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN RAISE EXCEPTION 'decisao do RH nao gravou'; END IF;
+  BEGIN
+    INSERT INTO documents (id, tenant_id, ticket_id, tipo, chave_storage, mime, tamanho_bytes, sha256)
+      VALUES (gen_random_uuid(),'00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-0000000000a4',
+              'RG','k2','text/html',10, repeat('a',64));
+    RAISE EXCEPTION 'mime invalido aceito';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  PERFORM set_config('app.tenant_id', '00000000-0000-0000-0000-00000000000b', true);
+  SELECT count(*) INTO n FROM documents; IF n <> 0 THEN RAISE EXCEPTION 'vazamento em documents: %', n; END IF;
+  BEGIN
+    INSERT INTO documents (id, tenant_id, ticket_id, tipo, chave_storage, mime, tamanho_bytes, sha256)
+      VALUES (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-0000000000a4',
+              'RG','k3','image/png',10, repeat('a',64));
+    RAISE EXCEPTION 'FK permitiu documento em chamado de outro tenant';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+  PERFORM set_config('app.tenant_id', '00000000-0000-0000-0000-00000000000a', true);
+
   -- 7. CHECKs de dominio
   BEGIN
     UPDATE tickets SET status = 'INVALIDO'; RAISE EXCEPTION 'status invalido aceito';

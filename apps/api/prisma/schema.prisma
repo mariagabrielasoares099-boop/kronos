@@ -21,6 +21,7 @@ model Tenant {
   jobs       Job[]
   candidates Candidate[]
   tickets    Ticket[]
+  documents  Document[]
 
   @@map("tenants")
 }
@@ -111,6 +112,7 @@ model Ticket {
   candidate Candidate     @relation(fields: [tenantId, candidateId], references: [tenantId, id])
   events    TicketEvent[]
   messages  Message[]
+  documents Document[]
 
   @@unique([tenantId, protocolo])
   @@unique([tenantId, id])
@@ -153,4 +155,27 @@ model Message {
 
   @@index([ticketId, createdAt])
   @@map("messages")
+}
+
+/// Documento enviado pelo candidato. O arquivo fica no storage; aqui so metadados.
+model Document {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  ticketId     String   @map("ticket_id") @db.Uuid
+  tipo         String // CHECK na migration
+  status       String   @default("PENDENTE") // CHECK na migration
+  motivo       String?
+  chaveStorage String   @unique @map("chave_storage")
+  mime         String // CHECK na migration
+  tamanhoBytes Int      @map("tamanho_bytes")
+  sha256       String
+  enviadoEm    DateTime @default(now()) @map("enviado_em") @db.Timestamptz(3)
+  revisadoPor  String?  @map("revisado_por") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  ticket Ticket @relation(fields: [tenantId, ticketId], references: [tenantId, id])
+
+  @@unique([tenantId, id])
+  @@index([tenantId, ticketId])
+  @@map("documents")
 }
