@@ -1,16 +1,18 @@
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import Settings, load_settings
+from .fila import filtrar, sla_situacao
 from .gateway import STATUS_LABELS, STATUSES, DemoGateway, Gateway
 from .security import RateLimiter, SecurityHeadersMiddleware
 from .validators import is_valid_cpf, is_valid_email, only_digits
 
 BASE = Path(__file__).parent
+SLA_LABELS = {"atrasado": "Atrasado", "vencendo": "Vence em 24h", "no_prazo": "No prazo", "sem_sla": "-"}
 
 
 def create_app(settings: Settings | None = None, gateway: Gateway | None = None) -> FastAPI:
@@ -95,6 +97,25 @@ def create_app(settings: Settings | None = None, gateway: Gateway | None = None)
         for c in gw.listar_chamados():
             colunas[c.status].append(c)
         return render(request, "painel.html", colunas=colunas)
+
+    def montar_fila(status: str, busca: str) -> dict:
+        if status and status not in STATUS_LABELS:
+            raise HTTPException(422, "Status invalido")
+        itens = filtrar(gw.listar_chamados(), status, busca)
+        return {"linhas": [(c, sla_situacao(c)) for c in itens], "sla_labels": SLA_LABELS,
+                "status": status, "busca": busca}
+
+    @app.get("/painel/fila", response_class=HTMLResponse)
+    def fila(request: Request, status: str = Query("", max_length=30), busca: str = Query("", max_length=60)):
+        if not cfg.demo_mode:  # mesma regra do /painel ate existir login + 2FA
+            raise HTTPException(404)
+        return render(request, "fila.html", **montar_fila(status, busca))
+
+    @app.get("/painel/fila/tabela", response_class=HTMLResponse)
+    def fila_tabela(request: Request, status: str = Query("", max_length=30), busca: str = Query("", max_length=60)):
+        if not cfg.demo_mode:
+            raise HTTPException(404)
+        return render(request, "_fila_tabela.html", **montar_fila(status, busca))
 
     return app
 
