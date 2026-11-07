@@ -38,7 +38,12 @@ export interface FlowConfig {
   enabled: readonly TicketStatus[];
 }
 
-const isActive = (s: TicketStatus, cfg: FlowConfig) =>
+/** Destino do retorno a partir de um status, ou null se ele nao tem retorno. */
+export function returnTarget(from: TicketStatus): TicketStatus | null {
+  return RETURNS[from]?.[0] ?? null;
+}
+
+const isActive =(s: TicketStatus, cfg: FlowConfig) =>
   !OPTIONAL_STATUSES.includes(s) || cfg.enabled.includes(s);
 
 export function nextStatus(current: TicketStatus, cfg: FlowConfig): TicketStatus | null {
