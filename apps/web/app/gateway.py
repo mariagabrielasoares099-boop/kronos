@@ -4,6 +4,7 @@ A regra de negocio (transicoes de status, SLA, RLS) mora na API. O DemoGateway s
 simula o suficiente para a tela funcionar e NAO e a fonte de verdade.
 """
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 STATUS_LABELS = {
@@ -37,6 +38,8 @@ class Chamado:
     nome: str
     status: str = "TRIAGEM"
     historico: list[tuple[str, str]] = field(default_factory=list)  # (status, motivo)
+    responsavel: str | None = None
+    prazo_sla: datetime | None = None
 
 
 class Gateway(Protocol):
@@ -57,9 +60,17 @@ class DemoGateway:
         }
         self._chamados: dict[str, Chamado] = {}
         self._seq = 0
-        for nome, st in [("Ana Souza", "VALIDACAO_DP"), ("Bruno Lima", "TRIAGEM")]:
+        agora = datetime.now(timezone.utc)
+        seeds = [
+            ("Ana Souza", "VALIDACAO_DP", "Carla (DP)", agora - timedelta(hours=5)),
+            ("Bruno Lima", "TRIAGEM", "Diego (RH)", agora + timedelta(hours=10)),
+            ("Carlos Mota", "AGUARDANDO_CANDIDATO", None, agora + timedelta(days=3)),
+            ("Daniela Reis", "ENTREVISTA", "Diego (RH)", agora + timedelta(days=1, hours=8)),
+            ("Eduardo Nunes", "ADMITIDO", "Carla (DP)", None),
+        ]
+        for nome, st, resp, prazo in seeds:
             c = self.criar_chamado("v1", nome)
-            c.status = st
+            c.status, c.responsavel, c.prazo_sla = st, resp, prazo
 
     def listar_vagas(self) -> list[Vaga]:
         return list(self._vagas.values())

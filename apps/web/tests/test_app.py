@@ -84,3 +84,53 @@ def test_lista_de_vagas_em_vagas_e_na_raiz():
     c = make()
     assert c.get("/vagas").status_code == 200
     assert c.get("/vagas").text == c.get("/").text
+
+
+# --- Fila do RH ---------------------------------------------------------------
+from datetime import datetime, timedelta, timezone
+
+from app.fila import filtrar, sla_situacao
+from app.gateway import Chamado
+
+AGORA = datetime(2026, 11, 7, 12, 0, tzinfo=timezone.utc)
+
+
+def _ch(status="TRIAGEM", prazo=None, nome="Ana", protocolo="ADM-2026-000001"):
+    return Chamado(protocolo, "v1", nome, status=status, prazo_sla=prazo)
+
+
+def test_sla_situacoes():
+    assert sla_situacao(_ch(prazo=AGORA - timedelta(minutes=1)), AGORA) == "atrasado"
+    assert sla_situacao(_ch(prazo=AGORA + timedelta(hours=24)), AGORA) == "vencendo"
+    assert sla_situacao(_ch(prazo=AGORA + timedelta(hours=25)), AGORA) == "no_prazo"
+    assert sla_situacao(_ch(prazo=None), AGORA) == "sem_sla"
+    assert sla_situacao(_ch(status="ADMITIDO", prazo=AGORA - timedelta(days=9)), AGORA) == "sem_sla"
+
+
+def test_filtrar_por_status_e_busca_e_ordena_por_urgencia():
+    a = _ch("TRIAGEM", AGORA + timedelta(days=2), "Ana Souza", "ADM-2026-000001")
+    b = _ch("TRIAGEM", AGORA + timedelta(hours=1), "Bruno Lima", "ADM-2026-000002")
+    c = _ch("ADMITIDO", None, "Carla Dias", "ADM-2026-000003")
+    assert filtrar([a, b, c]) == [b, a, c]
+    assert filtrar([a, b, c], status="ADMITIDO") == [c]
+    assert filtrar([a, b, c], busca="bruno") == [b]
+    assert filtrar([a, b, c], busca="000003") == [c]
+
+
+def test_fila_lista_filtra_e_so_existe_em_demo():
+    c = make()
+    page = c.get("/painel/fila")
+    assert page.status_code == 200 and "Ana Souza" in page.text and "Atrasado" in page.text
+    frag = c.get("/painel/fila/tabela", params={"status": "TRIAGEM"})
+    assert "Bruno Lima" in frag.text and "Ana Souza" not in frag.text
+    assert "<html" not in frag.text  # fragmento HTMX, sem layout
+    assert "Nenhum chamado" in c.get("/painel/fila/tabela", params={"busca": "zzz"}).text
+    assert make(demo=False).get("/painel/fila").status_code == 404
+    assert make(demo=False).get("/painel/fila/tabela").status_code == 404
+
+
+def test_fila_rejeita_status_invalido_e_escapa_busca():
+    c = make()
+    assert c.get("/painel/fila/tabela", params={"status": "HACK"}).status_code == 422
+    r = c.get("/painel/fila", params={"busca": '"><script>alert(1)</script>'})
+    assert "<script>alert(1)</script>" not in r.text
