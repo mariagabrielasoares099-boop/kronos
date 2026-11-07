@@ -49,6 +49,9 @@ docker compose up -d
 # 3. API (porta 3000; a primeira compilação pode demorar)
 cd apps/api
 npm install
+npx prisma generate
+npx prisma migrate deploy   # usa MIGRATE_DATABASE_URL (administrador)
+docker compose exec -T postgres psql -U kronos -d kronos < prisma/dev/app-role.sql   # papel de login da API (so dev)
 npm run start:dev
 
 # 4. Web (em outro terminal)
@@ -56,6 +59,8 @@ cd apps/web
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+> A API **recusa subir** se `DATABASE_URL` for de superusuário, BYPASSRLS ou dono das tabelas, porque o banco ignoraria o isolamento por empresa. Use o papel `kronos_api` (`.env.example`).
 
 > Se a porta 5432 já estiver em uso (outro Postgres local), suba com outra porta: `POSTGRES_PORT=5433 docker compose up -d` (Redis: `REDIS_PORT`) e ajuste a porta no `DATABASE_URL`.
 
