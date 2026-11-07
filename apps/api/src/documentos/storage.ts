@@ -9,7 +9,8 @@ export interface StoragePort {
   ler(chave: string): Promise<Buffer>;
 }
 
-const CHAVE_RE = /^[0-9a-f-]{36}\/[0-9a-f-]{36}$/;
+const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const CHAVE_RE = new RegExp(`^${UUID_PATTERN}/${UUID_PATTERN}$`);
 
 export class LocalDiskStorage implements StoragePort {
   private readonly raiz: string;

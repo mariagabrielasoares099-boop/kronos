@@ -89,4 +89,12 @@ describe('LocalDiskStorage', () => {
     await expect(s.ler('../../etc/passwd')).rejects.toThrow(/invalida/);
     await expect(s.ler(`${T}/../../x`)).rejects.toThrow(/invalida/);
   });
+
+  it('rejeita identificadores sem o formato UUID antes de acessar o disco', async () => {
+    const s = await criar();
+    const invalido = '-'.repeat(36);
+    await expect(s.salvar(invalido, PDF)).rejects.toThrow(/invalida/);
+    await expect(s.ler(`${T}/${invalido}`)).rejects.toThrow(/invalida/);
+    await expect(s.ler(`${'a'.repeat(36)}/${T}`)).rejects.toThrow(/invalida/);
+  });
 });
