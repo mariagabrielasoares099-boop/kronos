@@ -17,6 +17,9 @@ export interface EventoChamado {
   em: Date;
 }
 
+/** Regra de negocio violada (o controller traduz para 409). */
+export class ChamadoError extends Error {}
+
 export interface ChamadoProps {
   id: string;
   tenantId: string;
@@ -65,7 +68,7 @@ export class Chamado {
   /** Vai para a proxima etapa ativa da vaga. */
   avancar(autor: string | null, agora: Date = new Date()): TicketStatus {
     const para = nextStatus(this.props.status, this.props.fluxo);
-    if (!para) throw new Error(`Chamado ${this.props.status} nao tem proxima etapa`);
+    if (!para) throw new ChamadoError(`Chamado ${this.props.status} nao tem proxima etapa`);
     this.mover(para, autor, null, agora);
     return para;
   }
@@ -73,7 +76,7 @@ export class Chamado {
   /** Retorno: documento recusado volta ao candidato; erro do ERP volta ao DP. */
   devolver(autor: string | null, motivo: string, agora: Date = new Date()): TicketStatus {
     const para = returnTarget(this.props.status);
-    if (!para) throw new Error(`Chamado ${this.props.status} nao tem retorno`);
+    if (!para) throw new ChamadoError(`Chamado ${this.props.status} nao tem retorno`);
     this.mover(para, autor, motivo, agora);
     return para;
   }

@@ -177,6 +177,7 @@ Premissas a validar com o piloto; abaixo de dezenas de milhões de linhas não h
 | `20261107000000_tenant_update_permissions` | Restringe UPDATE de `tenants` a `nome`, `cnpj` e `config`; plano e identidade ficam no provisionamento |
 | `20261107000200_documents` | Tabela `documents` (metadados; arquivo no storage) com RLS, FK composta com `tickets`, CHECKs e `kronos_app` só com SELECT, INSERT e UPDATE de `status`, `motivo`, `revisado_por`. Contém dado pessoal (documentos de identidade): acesso só por download autenticado; remoção/anonimização entra na M2 |
 | `20261107000300_acesso_por_empresa` | Acesso por empresa e por pessoa (LGPD): `companies.matriz_id` (um nível), `user_companies`, `ticket_assignments`, funções de visibilidade e políticas RLS restritivas. Exige que o papel da migration tenha BYPASSRLS (no Supabase, `postgres` já tem) |
+| `20261107000400_protocol_counters` | `protocol_counters (tenant_id, ano, ultimo)` para o protocolo `ADM-AAAA-NNNNNN`, incrementado de forma atômica (`INSERT … ON CONFLICT DO UPDATE`). Não dá para usar `max(protocolo)`: o RLS por empresa esconde chamados de outras empresas e geraria repetidos. Só isolamento por tenant (não é dado pessoal) |
 
 Execute o teste com `psql -f apps/api/prisma/tests/rls_isolation.sql` usando uma conexão administrativa de desenvolvimento com todas as migrations aplicadas. O script habilita `ON_ERROR_STOP`: qualquer erro encerra o processo com falha e a conexão desfaz a transação. Inclui restrições de plano/identidade, DELETE de eventos e rejeição de referência a empresa de outro tenant.
 
@@ -185,7 +186,7 @@ Teste de isolamento: `apps/api/prisma/tests/rls_isolation.sql` (rodar num banco 
 ## Perguntas em aberto
 
 - Nomes e ordem exatos dos 10 status: conferir com o diagrama do PDF (era imagem) e ajustar o `CHECK` e `ticket-status.ts` juntos.
-- Tabelas ainda não modeladas: `document_types`, `admission_data`, `erp_connections`, `erp_syncs`, `erp_lookups`, `tests*`, `signature_requests`, `contract_templates`, `uniform_*`, contador de protocolo. Entram em migrations próprias por módulo.
+- Tabelas ainda não modeladas: `document_types`, `admission_data`, `erp_connections`, `erp_syncs`, `erp_lookups`, `tests*`, `signature_requests`, `contract_templates`, `uniform_*`. Entram em migrations próprias por módulo.
 - Prazo de retenção da guarda de documentos admissionais (jurídico).
 - Meta de RPO/RTO do backup.
 
