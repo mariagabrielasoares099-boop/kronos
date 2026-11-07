@@ -22,6 +22,8 @@ model Tenant {
   candidates Candidate[]
   tickets    Ticket[]
   documents  Document[]
+  userCompanies     UserCompany[]
+  ticketAssignments TicketAssignment[]
 
   @@map("tenants")
 }
@@ -32,13 +34,18 @@ model Company {
   cnpj        String
   razaoSocial String  @map("razao_social")
   codigoErp   String? @map("codigo_erp")
+  matrizId    String? @map("matriz_id") @db.Uuid // filial aponta para a matriz (um nivel)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  jobs   Job[]
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  matriz        Company?      @relation("MatrizFilial", fields: [tenantId, matrizId], references: [tenantId, id])
+  filiais       Company[]     @relation("MatrizFilial")
+  jobs          Job[]
+  userCompanies UserCompany[]
 
   @@unique([tenantId, cnpj])
   @@unique([tenantId, id])
   @@index([tenantId])
+  @@index([tenantId, matrizId])
   @@map("companies")
 }
 
@@ -52,9 +59,12 @@ model User {
   totpSecret   String?  @map("totp_secret") // criptografado em repouso
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  companies   UserCompany[]
+  assignments TicketAssignment[]
 
   @@unique([tenantId, email])
+  @@unique([tenantId, id])
   @@map("users")
 }
 
@@ -113,6 +123,7 @@ model Ticket {
   events    TicketEvent[]
   messages  Message[]
   documents Document[]
+  assignments TicketAssignment[]
 
   @@unique([tenantId, protocolo])
   @@unique([tenantId, id])
@@ -178,4 +189,36 @@ model Document {
   @@unique([tenantId, id])
   @@index([tenantId, ticketId])
   @@map("documents")
+}
+
+/// Vinculo usuario-empresa. Vinculo com a matriz vale para as filiais (regra no RLS).
+model UserCompany {
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  user    User    @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  company Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([userId, companyId])
+  @@index([tenantId, companyId])
+  @@map("user_companies")
+}
+
+/// Atribuicao de um chamado a uma pessoa. Documentos exigem vinculo com a empresa E atribuicao.
+model TicketAssignment {
+  tenantId  String   @map("tenant_id") @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  ticket Ticket @relation(fields: [tenantId, ticketId], references: [tenantId, id], onDelete: Cascade)
+  user   User   @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([ticketId, userId])
+  @@index([tenantId, userId])
+  @@map("ticket_assignments")
 }

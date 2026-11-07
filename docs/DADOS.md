@@ -176,6 +176,7 @@ Premissas a validar com o piloto; abaixo de dezenas de milhões de linhas não h
 | `20261105000100_rls_roles` | RLS `FORCE` com política `tenant_isolation`, trigger append-only, CHECKs, índice parcial de SLA, papel `kronos_app` (sem BYPASSRLS) e `REVOKE UPDATE, DELETE, TRUNCATE` em `ticket_events` |
 | `20261107000000_tenant_update_permissions` | Restringe UPDATE de `tenants` a `nome`, `cnpj` e `config`; plano e identidade ficam no provisionamento |
 | `20261107000200_documents` | Tabela `documents` (metadados; arquivo no storage) com RLS, FK composta com `tickets`, CHECKs e `kronos_app` só com SELECT, INSERT e UPDATE de `status`, `motivo`, `revisado_por`. Contém dado pessoal (documentos de identidade): acesso só por download autenticado; remoção/anonimização entra na M2 |
+| `20261107000300_acesso_por_empresa` | Acesso por empresa e por pessoa (LGPD): `companies.matriz_id` (um nível), `user_companies`, `ticket_assignments`, funções de visibilidade e políticas RLS restritivas. Exige que o papel da migration tenha BYPASSRLS (no Supabase, `postgres` já tem) |
 
 Execute o teste com `psql -f apps/api/prisma/tests/rls_isolation.sql` usando uma conexão administrativa de desenvolvimento com todas as migrations aplicadas. O script habilita `ON_ERROR_STOP`: qualquer erro encerra o processo com falha e a conexão desfaz a transação. Inclui restrições de plano/identidade, DELETE de eventos e rejeição de referência a empresa de outro tenant.
 
@@ -187,3 +188,21 @@ Teste de isolamento: `apps/api/prisma/tests/rls_isolation.sql` (rodar num banco 
 - Tabelas ainda não modeladas: `document_types`, `admission_data`, `erp_connections`, `erp_syncs`, `erp_lookups`, `tests*`, `signature_requests`, `contract_templates`, `uniform_*`, contador de protocolo. Entram em migrations próprias por módulo.
 - Prazo de retenção da guarda de documentos admissionais (jurídico).
 - Meta de RPO/RTO do backup.
+
+
+## Acesso por empresa e por pessoa autorizada (LGPD)
+
+Além do isolamento por tenant, os dados de uma empresa ficam fechados para ela. O banco aplica a regra (políticas RLS **restritivas**, somadas com AND ao isolamento por tenant); a API só informa o contexto de cada transação: `app.tenant_id`, `app.user_id`, `app.user_role` e, no portal, `app.candidate_id`. Sem contexto, nenhuma linha é devolvida.
+
+| Quem | O que enxerga |
+|---|---|
+| Usuário vinculado a uma **filial** | Só a própria filial |
+| Usuário vinculado à **matriz** | A matriz e todas as filiais (o inverso não vale) |
+| Usuário sem vínculo com a empresa | Nada dela: nem vagas, chamados, candidatos, eventos, mensagens ou documentos |
+| **ADMIN** | Gere cadastro de empresas, usuários e vínculos, mas **não** vê chamados, candidatos, vagas nem documentos |
+| Documentos | Exigem vínculo com a empresa **e** atribuição ao chamado (`ticket_assignments`) |
+| **Candidato** | Só o próprio cadastro, chamados, documentos e mensagens não internas |
+
+Garantias no banco: ninguém se vincula nem se atribui sozinho (só ADMIN vincula; só RECRUTADOR/DP que opera o chamado atribui); atribuir exige que o atribuído já tenha vínculo com a empresa; matriz não pode ser filial e filial não tem filiais.
+
+Premissas: quem cria o candidato declara `app.candidate_id` com o id novo (o `INSERT ... RETURNING` precisa enxergar a linha); o que cada papel *faz* (aprovar documento, avançar status) continua na API; a decisão do RH em documentos limita-se, por GRANT, às colunas `status`, `motivo` e `revisado_por`, mas a API deve impedir o candidato de decidir o próprio documento. O teste `apps/api/prisma/tests/rls_isolation.sql` cobre matriz/filial, ADMIN, atribuição, candidato e tenants.
