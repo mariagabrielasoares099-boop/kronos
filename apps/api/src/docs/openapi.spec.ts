@@ -118,5 +118,6 @@ describe('GET /openapi.json (guard real)', () => {
     } finally {
       await app.close();
     }
-  });
+    // Sobe a app Nest inteira: sob carga (suite completa com banco) estoura os 5 s padrao.
+  }, 30_000);
 });
