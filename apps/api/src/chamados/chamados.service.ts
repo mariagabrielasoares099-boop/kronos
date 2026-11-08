@@ -4,7 +4,7 @@ import type { DbContext } from '../db/db-context.js';
 import { Chamado } from '../domain/chamado.js';
 import { Cpf } from '../domain/cpf.js';
 import type { TicketStatus } from '../domain/ticket-status.js';
-import { CandidatoJaExisteError, UNIT_OF_WORK, type UnitOfWork } from './chamado.repository.js';
+import { CandidatoJaExisteError, UNIT_OF_WORK, type UnitOfWork, type ChamadoLeitura } from './chamado.repository.js';
 import type { CriarChamadoDto, TransicaoDto } from './chamados.schemas.js';
 
 export class VagaNaoEncontradaError extends Error {}
@@ -21,7 +21,7 @@ export interface ChamadoView {
   erpRef: string | null;
 }
 
-const view = (c: Chamado): ChamadoView => ({
+const view = (c: ChamadoLeitura): ChamadoView => ({
   id: c.id, protocolo: c.protocolo, status: c.status, jobId: c.jobId, erpRef: c.erpRef,
 });
 

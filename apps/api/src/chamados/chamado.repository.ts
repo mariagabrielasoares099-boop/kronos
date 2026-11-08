@@ -14,6 +14,9 @@ export interface NovoCandidato {
 
 export class CandidatoJaExisteError extends Error {}
 
+/** Leitura publica do chamado nao depende do fluxo da vaga, restrito a equipe. */
+export type ChamadoLeitura = Pick<Chamado, 'id' | 'protocolo' | 'status' | 'jobId' | 'erpRef'>;
+
 /** Porta de persistencia do agregado Chamado. Uma instancia vale por unidade de trabalho (transacao). */
 export interface ChamadoRepository {
   /** Proximo protocolo ADM-AAAA-NNNNNN do tenant (contador atomico). */
@@ -23,7 +26,7 @@ export interface ChamadoRepository {
   criarCandidato(c: NovoCandidato): Promise<void>;
   /** Grava o chamado novo e seus eventos. */
   inserir(chamado: Chamado): Promise<void>;
-  obterPorProtocolo(protocolo: string): Promise<Chamado | null>;
+  obterPorProtocolo(protocolo: string): Promise<ChamadoLeitura | null>;
   obterPorId(id: string): Promise<Chamado | null>;
   /** Grava o novo status e os eventos pendentes; false se alguem mudou o status antes (concorrencia). */
   salvarTransicao(chamado: Chamado, statusAnterior: string): Promise<boolean>;

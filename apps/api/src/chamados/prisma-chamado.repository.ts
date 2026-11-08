@@ -5,7 +5,7 @@ import { DbService, Tx } from '../db/db.service.js';
 import { Chamado, EventoChamado } from '../domain/chamado.js';
 import { formatProtocol } from '../domain/protocol.js';
 import { FlowConfig, OPTIONAL_STATUSES, TicketStatus } from '../domain/ticket-status.js';
-import { CandidatoJaExisteError, ChamadoRepository, NovoCandidato, UnitOfWork } from './chamado.repository.js';
+import { CandidatoJaExisteError, ChamadoRepository, NovoCandidato, UnitOfWork, type ChamadoLeitura } from './chamado.repository.js';
 
 const STATUS_VALIDOS = new Set<string>(Object.values(TicketStatus));
 
@@ -61,8 +61,15 @@ export class PrismaChamadoRepository implements ChamadoRepository {
     await this.gravarEventos(chamado);
   }
 
-  obterPorProtocolo(protocolo: string): Promise<Chamado | null> {
-    return this.carregar({ protocolo });
+  async obterPorProtocolo(protocolo: string): Promise<ChamadoLeitura | null> {
+    // O candidato pode ler seu chamado sem ter acesso a jobs. Nao exigir a
+    // relacao obrigatoria com a vaga nesta consulta: o RLS pode ocultar a vaga.
+    const t = await this.tx.ticket.findFirst({
+      where: { protocolo },
+      select: { id: true, protocolo: true, status: true, jobId: true, erpRef: true },
+    });
+    if (!t || !STATUS_VALIDOS.has(t.status)) return null;
+    return { ...t, status: t.status as TicketStatus };
   }
 
   obterPorId(id: string): Promise<Chamado | null> {
