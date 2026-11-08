@@ -6,6 +6,7 @@ import { AuthGuard } from './auth/auth.guard.js';
 import { ChamadosModule } from './chamados/chamados.module.js';
 import { parseEnv } from './config/env.js';
 import { DbModule } from './db/db.module.js';
+import { DocsController } from './docs/docs.controller.js';
 import { HealthController } from './health/health.controller.js';
 
 @Module({
@@ -21,7 +22,7 @@ import { HealthController } from './health/health.controller.js';
     ]),
     ChamadosModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, DocsController],
   providers: [
     // Ordem: rate limit primeiro, depois autenticacao. Rotas abertas usam @Public().
     { provide: APP_GUARD, useClass: ThrottlerGuard },
