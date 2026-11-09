@@ -41,6 +41,7 @@ DECLARE
   ub  uuid := '00000000-0000-0000-0000-0000000000e9';  -- admin de B
   b1  uuid := '00000000-0000-0000-0000-0000000000a9';  -- empresa de B
   n int;
+  papel text;
 BEGIN
   ---------------------------------------------------------------------------
   -- Preparacao (pelo caminho normal da API, com o papel kronos_app)
@@ -56,7 +57,7 @@ BEGIN
   INSERT INTO companies (id, tenant_id, cnpj, razao_social, matriz_id) VALUES (fil, ta, '11111111000222', 'Filial A', mat);
   INSERT INTO companies (id, tenant_id, cnpj, razao_social) VALUES (oth, ta, '33333333000133', 'Outra A');
   INSERT INTO user_companies (tenant_id, user_id, company_id) VALUES
-    (ta, rhm, mat), (ta, rhn, mat), (ta, rhf, fil), (ta, rhx, oth);
+    (ta, adm, mat), (ta, rhm, mat), (ta, rhn, mat), (ta, rhf, fil), (ta, rhx, oth);
 
   PERFORM pg_temp.ctx(ta, rhm, 'RECRUTADOR', c1);
   INSERT INTO jobs (id, tenant_id, company_id, titulo) VALUES (jf, ta, fil, 'Vaga filial');  -- matriz opera a filial
@@ -138,6 +139,18 @@ BEGIN
   SELECT count(*) INTO n FROM candidates; IF n <> 0 THEN RAISE EXCEPTION 'admin viu candidatos: %', n; END IF;
   SELECT count(*) INTO n FROM documents;  IF n <> 0 THEN RAISE EXCEPTION 'admin viu documentos: %', n; END IF;
   SELECT count(*) INTO n FROM jobs;       IF n <> 0 THEN RAISE EXCEPTION 'admin viu vagas: %', n; END IF;
+
+  -- Usuario vinculado mas SEM papel no contexto (a API ja recusa esse contexto; o banco tambem): falha segura.
+  PERFORM pg_temp.ctx(ta, rhm, NULL);
+  SELECT count(*) INTO n FROM jobs;    IF n <> 0 THEN RAISE EXCEPTION 'sem papel viu vagas: %', n; END IF;
+  SELECT count(*) INTO n FROM tickets; IF n <> 0 THEN RAISE EXCEPTION 'sem papel viu chamados: %', n; END IF;
+
+  -- Todo papel operacional vinculado a filial enxerga a vaga da filial (e so ela).
+  FOREACH papel IN ARRAY ARRAY['RECRUTADOR','DP','GESTOR_VAGA','AVALIADOR','ALMOXARIFADO']
+  LOOP
+    PERFORM pg_temp.ctx(ta, rhf, papel);
+    SELECT count(*) INTO n FROM jobs; IF n <> 1 THEN RAISE EXCEPTION '% deveria ver 1 vaga: %', papel, n; END IF;
+  END LOOP;
 
   -- Sem usuario no contexto: falha segura.
   PERFORM pg_temp.ctx(ta);

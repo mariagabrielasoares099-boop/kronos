@@ -41,7 +41,7 @@ describe.skipIf(!ADMIN || !APP)('DbService com RLS real', () => {
     }
     await q(`INSERT INTO companies (id, tenant_id, cnpj, razao_social) VALUES ($1,$3,'11111111000111','Matriz'), ($2,$3,'33333333000133','Outra')`, [matriz, outra, T]);
     await q(`INSERT INTO companies (id, tenant_id, cnpj, razao_social, matriz_id) VALUES ($1,$2,'11111111000222','Filial',$3)`, [filial, T, matriz]);
-    for (const [u, c] of [[rhMatriz, matriz], [rhSemAtrib, matriz], [rhFilial, filial], [rhOutra, outra]]) {
+    for (const [u, c] of [[adm, matriz], [rhMatriz, matriz], [rhSemAtrib, matriz], [rhFilial, filial], [rhOutra, outra]]) {
       await q(`INSERT INTO user_companies (tenant_id, user_id, company_id) VALUES ($1,$2,$3)`, [T, u, c]);
     }
     await q(`INSERT INTO jobs (id, tenant_id, company_id, titulo) VALUES ($1,$3,$4,'v1'), ($2,$3,$5,'v2')`, [jobFilial, jobOutra, T, filial, outra]);
@@ -87,8 +87,23 @@ describe.skipIf(!ADMIN || !APP)('DbService com RLS real', () => {
     expect(vaza).toBeNull();
   });
 
-  it('ADMIN gere cadastro mas nao ve chamados, candidatos nem documentos', async () => {
+  it('ADMIN com vinculo a empresa gere cadastro mas nao ve chamados, candidatos nem documentos', async () => {
     expect(await contar({ tenantId: T, userId: adm, role: 'ADMIN' })).toEqual({ empresas: 3, chamados: 0, candidatos: 0, documentos: 0 });
+    expect(await db.run({ tenantId: T, userId: adm, role: 'ADMIN' }, (tx) => tx.job.count())).toBe(0);
+  });
+
+  it.each(['GESTOR_VAGA', 'AVALIADOR', 'ALMOXARIFADO'] as const)(
+    'papel operacional %s com vinculo a empresa enxerga as vagas dela',
+    async (role) => {
+      const vagas = await db.run({ tenantId: T, userId: rhFilial, role }, (tx) => tx.job.findMany());
+      expect(vagas.map((j) => j.id)).toEqual([jobFilial]);
+    },
+  );
+
+  it('contexto com usuario e sem papel nem chega ao banco (a falha segura do banco fica no rls_isolation.sql)', async () => {
+    await expect(db.run({ tenantId: T, userId: rhMatriz }, (tx) => tx.job.count())).rejects.toThrow(
+      /userId e role devem ser informados juntos/,
+    );
   });
 
   it('documento exige atribuicao ao chamado', async () => {
