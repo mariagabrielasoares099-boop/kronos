@@ -56,7 +56,7 @@ BEGIN
   INSERT INTO companies (id, tenant_id, cnpj, razao_social, matriz_id) VALUES (fil, ta, '11111111000222', 'Filial A', mat);
   INSERT INTO companies (id, tenant_id, cnpj, razao_social) VALUES (oth, ta, '33333333000133', 'Outra A');
   INSERT INTO user_companies (tenant_id, user_id, company_id) VALUES
-    (ta, rhm, mat), (ta, rhn, mat), (ta, rhf, fil), (ta, rhx, oth);
+    (ta, adm, mat), (ta, rhm, mat), (ta, rhn, mat), (ta, rhf, fil), (ta, rhx, oth);
 
   PERFORM pg_temp.ctx(ta, rhm, 'RECRUTADOR', c1);
   INSERT INTO jobs (id, tenant_id, company_id, titulo) VALUES (jf, ta, fil, 'Vaga filial');  -- matriz opera a filial

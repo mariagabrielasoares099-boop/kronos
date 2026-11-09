@@ -41,7 +41,7 @@ describe.skipIf(!ADMIN || !APP)('DbService com RLS real', () => {
     }
     await q(`INSERT INTO companies (id, tenant_id, cnpj, razao_social) VALUES ($1,$3,'11111111000111','Matriz'), ($2,$3,'33333333000133','Outra')`, [matriz, outra, T]);
     await q(`INSERT INTO companies (id, tenant_id, cnpj, razao_social, matriz_id) VALUES ($1,$2,'11111111000222','Filial',$3)`, [filial, T, matriz]);
-    for (const [u, c] of [[rhMatriz, matriz], [rhSemAtrib, matriz], [rhFilial, filial], [rhOutra, outra]]) {
+    for (const [u, c] of [[adm, matriz], [rhMatriz, matriz], [rhSemAtrib, matriz], [rhFilial, filial], [rhOutra, outra]]) {
       await q(`INSERT INTO user_companies (tenant_id, user_id, company_id) VALUES ($1,$2,$3)`, [T, u, c]);
     }
     await q(`INSERT INTO jobs (id, tenant_id, company_id, titulo) VALUES ($1,$3,$4,'v1'), ($2,$3,$5,'v2')`, [jobFilial, jobOutra, T, filial, outra]);
@@ -87,8 +87,9 @@ describe.skipIf(!ADMIN || !APP)('DbService com RLS real', () => {
     expect(vaza).toBeNull();
   });
 
-  it('ADMIN gere cadastro mas nao ve chamados, candidatos nem documentos', async () => {
+  it('ADMIN com vinculo a empresa gere cadastro mas nao ve chamados, candidatos nem documentos', async () => {
     expect(await contar({ tenantId: T, userId: adm, role: 'ADMIN' })).toEqual({ empresas: 3, chamados: 0, candidatos: 0, documentos: 0 });
+    expect(await db.run({ tenantId: T, userId: adm, role: 'ADMIN' }, (tx) => tx.job.count())).toBe(0);
   });
 
   it('documento exige atribuicao ao chamado', async () => {
