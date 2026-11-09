@@ -25,6 +25,10 @@ Limites adicionais por usuário e tenant ainda estão pendentes no passo 3.
 Chamado sem permissão de leitura responde `404`, igual a chamado inexistente.
 Erros `400` trazem `erros: [{ campo, problema }]`, nunca o valor recebido (pode ser dado pessoal).
 
+### Limitação conhecida do M1: um candidato por CPF
+
+`POST /chamados` cria um candidato novo a cada chamado, e o banco tem `unique(tenant_id, cpf)`. Quem já tem cadastro no tenant e se candidata a uma segunda vaga recebe `409` ("já existe candidato com este CPF"). Além disso, o `409` revela que o CPF existe no tenant mesmo quando o cadastro pertence a outra empresa (o RLS esconde a linha, a unique do banco não). Decisão do dono do produto: aceitar no M1. Correção prevista: localizar o candidato por CPF em função `SECURITY DEFINER` restrita e criar só o chamado.
+
 ## Exemplos
 
 ### Python
