@@ -126,7 +126,60 @@ describe.skipIf(!ADMIN || !APP)('DbService com RLS real', () => {
       db.run({ tenantId: T, userId: rhOutra, role: 'RECRUTADOR' }, (tx) =>
         tx.ticket.create({ data: { tenantId: T, protocolo: 'ADM-2026-900099', jobId: jobFilial, candidateId: cand2 } }),
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  // --- Escrita: o ramo do candidato vale so para leitura (20261109000100_rls_escrita) -----------------
+  const candidato = { tenantId: T, candidateId: cand1 };
+  const lerAdmin = async (sql: string, p: unknown[]) => (await admin.query(sql, p)).rows[0];
+
+  it('candidato nao altera o status do proprio chamado', async () => {
+    const r = await db.run(candidato, (tx) => tx.ticket.updateMany({ where: { id: t1 }, data: { status: 'APROVADO' } }));
+    expect(r.count).toBe(0);
+    expect((await lerAdmin(`SELECT status FROM tickets WHERE id = $1`, [t1])).status).toBe('TRIAGEM');
+  });
+
+  it('candidato nao aprova o proprio documento', async () => {
+    const r = await db.run(candidato, (tx) => tx.document.updateMany({ where: { id: doc1 }, data: { status: 'APROVADO' } }));
+    expect(r.count).toBe(0);
+    expect((await lerAdmin(`SELECT status FROM documents WHERE id = $1`, [doc1])).status).toBe('PENDENTE');
+  });
+
+  it('candidato nao apaga nem edita o proprio cadastro pelo banco', async () => {
+    const del = await db.run(candidato, (tx) => tx.candidate.deleteMany({ where: { id: cand1 } }));
+    const upd = await db.run(candidato, (tx) => tx.candidate.updateMany({ where: { id: cand1 }, data: { nome: 'X' } }));
+    expect([del.count, upd.count]).toEqual([0, 0]);
+    expect((await lerAdmin(`SELECT nome FROM candidates WHERE id = $1`, [cand1])).nome).toBe('C1');
+  });
+
+  it('equipe atribuida ao chamado aprova documento (controle positivo)', async () => {
+    const r = await db.run({ tenantId: T, userId: rhMatriz, role: 'RECRUTADOR' }, (tx) =>
+      tx.document.updateMany({ where: { id: doc1 }, data: { status: 'APROVADO', revisadoPor: rhMatriz } }),
+    );
+    expect(r.count).toBe(1);
+    await admin.query(`UPDATE documents SET status = 'PENDENTE', revisado_por = NULL WHERE id = $1`, [doc1]);
+  });
+
+  it('criar chamado em vaga sem vinculo e recusado mesmo com candidateId no contexto', async () => {
+    // criar() injeta candidateId para o RETURNING enxergar a linha; isso nao pode liberar a vaga.
+    await expect(
+      db.run({ tenantId: T, userId: rhOutra, role: 'RECRUTADOR', candidateId: cand2 }, (tx) =>
+        tx.ticket.create({ data: { tenantId: T, protocolo: 'ADM-2026-900098', jobId: jobFilial, candidateId: cand2 } }),
+      ),
+    ).rejects.toThrow(/row-level security/i);
+  });
+
+  it('a aplicacao nao le password_hash nem totp_secret, mas le o resto de users', async () => {
+    const ctx = { tenantId: T, userId: rhMatriz, role: 'RECRUTADOR' as const };
+    await expect(db.run(ctx, (tx) => tx.$queryRawUnsafe(`SELECT password_hash FROM users`))).rejects.toThrow(/permission denied/i);
+    await expect(db.run(ctx, (tx) => tx.$queryRawUnsafe(`SELECT totp_secret FROM users`))).rejects.toThrow(/permission denied/i);
+    const ok = await db.run(ctx, (tx) => tx.$queryRawUnsafe<{ id: string }[]>(`SELECT id, nome, email, role FROM users`));
+    expect(ok.length).toBeGreaterThan(0);
+  });
+
+  it('protocol_counters: a aplicacao so atualiza a coluna ultimo', async () => {
+    const ctx = { tenantId: T, userId: rhMatriz, role: 'RECRUTADOR' as const };
+    await expect(db.run(ctx, (tx) => tx.$executeRawUnsafe(`UPDATE protocol_counters SET ano = 2999`))).rejects.toThrow(/permission denied/i);
   });
 
   it('contexto invalido nem chega ao banco', async () => {

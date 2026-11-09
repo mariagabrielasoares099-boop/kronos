@@ -1,0 +1,93 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Testes de isolamento (RLS) contra Postgres real. Sem as variaveis TEST_* o vitest PULA esses testes
+  # e o `npm test` fica verde sem provar nada; por isso o job falha se qualquer teste for pulado.
+  api:
+    runs-on: ubuntu-latest
+    env:
+      # Valores descartaveis do container de CI (nao sao segredos de ambiente algum).
+      CI_DB_ADMIN_PASSWORD: ci-admin-descartavel
+      CI_DB_API_PASSWORD: kronos_api_dev # o mesmo de prisma/dev/app-role.sql
+      PGPASSWORD: ci-admin-descartavel
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: kronos
+          POSTGRES_PASSWORD: ci-admin-descartavel
+          POSTGRES_DB: kronos_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kronos -d kronos_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Migrations (ordem do nome, cada uma em transacao) e papel de login da API
+        run: |
+          for f in prisma/migrations/*/migration.sql; do
+            echo "-> $f"
+            psql -h 127.0.0.1 -U kronos -d kronos_test -v ON_ERROR_STOP=1 -1 -q -f "$f"
+          done
+          psql -h 127.0.0.1 -U kronos -d kronos_test -v ON_ERROR_STOP=1 -q -f prisma/dev/app-role.sql
+          psql -h 127.0.0.1 -U kronos -d kronos_test -v ON_ERROR_STOP=1 -q -c "GRANT CONNECT ON DATABASE kronos_test TO kronos_api"
+      - name: Isolamento entre tenants/empresas (SQL)
+        run: psql -h 127.0.0.1 -U kronos -d kronos_test -v ON_ERROR_STOP=1 -q -f prisma/tests/rls_isolation.sql
+      - run: npx tsc --noEmit
+      - name: Testes (unitarios + integracao com RLS real)
+        env:
+          TEST_ADMIN_DATABASE_URL: postgresql://kronos:${{ env.CI_DB_ADMIN_PASSWORD }}@127.0.0.1:5432/kronos_test
+          TEST_APP_DATABASE_URL: postgresql://kronos_api:${{ env.CI_DB_API_PASSWORD }}@127.0.0.1:5432/kronos_test
+        run: npx vitest run --reporter=default --reporter=json --outputFile=vitest-result.json
+      - name: Nenhum teste pode ser pulado
+        run: |
+          node -e "
+            const r = require('./vitest-result.json');
+            if (r.numPendingTests > 0 || r.numTodoTests > 0) {
+              console.error('Testes pulados/todo: ' + r.numPendingTests + '/' + r.numTodoTests + ' (integracao sem banco?)');
+              process.exit(1);
+            }
+            console.log('OK: ' + r.numPassedTests + ' testes, 0 pulados');
+          "
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/web/requirements.txt
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest

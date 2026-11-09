@@ -8,5 +8,8 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    // Os testes de integracao abrem pool/app Nest; na 1a execucao (cache frio) 5 s nao bastam.
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
   },
 });
