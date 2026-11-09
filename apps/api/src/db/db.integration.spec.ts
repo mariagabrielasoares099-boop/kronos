@@ -92,6 +92,20 @@ describe.skipIf(!ADMIN || !APP)('DbService com RLS real', () => {
     expect(await db.run({ tenantId: T, userId: adm, role: 'ADMIN' }, (tx) => tx.job.count())).toBe(0);
   });
 
+  it.each(['GESTOR_VAGA', 'AVALIADOR', 'ALMOXARIFADO'] as const)(
+    'papel operacional %s com vinculo a empresa enxerga as vagas dela',
+    async (role) => {
+      const vagas = await db.run({ tenantId: T, userId: rhFilial, role }, (tx) => tx.job.findMany());
+      expect(vagas.map((j) => j.id)).toEqual([jobFilial]);
+    },
+  );
+
+  it('contexto com usuario e sem papel nem chega ao banco (a falha segura do banco fica no rls_isolation.sql)', async () => {
+    await expect(db.run({ tenantId: T, userId: rhMatriz }, (tx) => tx.job.count())).rejects.toThrow(
+      /userId e role devem ser informados juntos/,
+    );
+  });
+
   it('documento exige atribuicao ao chamado', async () => {
     expect((await contar({ tenantId: T, userId: rhSemAtrib, role: 'RECRUTADOR' })).documentos).toBe(0);
     expect((await contar({ tenantId: T, userId: rhMatriz, role: 'RECRUTADOR' })).documentos).toBe(1);
