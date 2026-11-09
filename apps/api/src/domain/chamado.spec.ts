@@ -155,4 +155,15 @@ describe('Admissao', () => {
       AdmissaoInvalidaError,
     );
   });
+
+  it('rejeita datas invalidas antes de comparar nascimento e admissao', () => {
+    const hoje = new Date('2026-11-07');
+    expect(() => Admissao.criar({ ...dados, nascimento: new Date('invalida') }, hoje)).toThrow(AdmissaoInvalidaError);
+    expect(() => Admissao.criar({ ...dados, dataAdmissao: new Date('invalida') }, hoje)).toThrow(AdmissaoInvalidaError);
+    expect(() => Admissao.criar(dados, new Date('invalida'))).toThrow(AdmissaoInvalidaError);
+  });
+
+  it('rejeita salario que perde precisao em centavos', () => {
+    expect(() => Admissao.criar({ ...dados, salarioCentavos: Number.MAX_SAFE_INTEGER + 1 })).toThrow(AdmissaoInvalidaError);
+  });
 });

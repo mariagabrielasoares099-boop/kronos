@@ -42,8 +42,11 @@ export class Admissao {
     const cargo = d.cargo.trim();
     if (!nome) throw new AdmissaoInvalidaError('Nome obrigatorio');
     if (!cargo) throw new AdmissaoInvalidaError('Cargo obrigatorio');
-    if (!Number.isInteger(d.salarioCentavos) || d.salarioCentavos <= 0) {
+    if (!Number.isSafeInteger(d.salarioCentavos) || d.salarioCentavos <= 0) {
       throw new AdmissaoInvalidaError('Salario deve ser um inteiro positivo em centavos');
+    }
+    if (![d.nascimento, d.dataAdmissao, hoje].every((data) => Number.isFinite(data.getTime()))) {
+      throw new AdmissaoInvalidaError('Data invalida');
     }
     if (d.nascimento >= hoje) throw new AdmissaoInvalidaError('Nascimento deve ser no passado');
     if (d.dataAdmissao < d.nascimento) {
