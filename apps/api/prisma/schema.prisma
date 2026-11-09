@@ -1,4 +1,4 @@
-// Modelo central (Fase 1). Toda tabela de negocio carrega tenant_id e tem RLS (ver migrations/rls).
+// Modelo central (Fase 1). Toda tabela de negocio carrega tenant_id e tem RLS (ver prisma/migrations/*_rls_roles).
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -14,13 +14,17 @@ model Tenant {
   cnpj      String?
   plano     String   @default("trial")
   config    Json     @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   companies  Company[]
   users      User[]
   jobs       Job[]
   candidates Candidate[]
   tickets    Ticket[]
+  documents  Document[]
+  userCompanies     UserCompany[]
+  ticketAssignments TicketAssignment[]
+  protocolCounters  ProtocolCounter[]
 
   @@map("tenants")
 }
@@ -31,12 +35,18 @@ model Company {
   cnpj        String
   razaoSocial String  @map("razao_social")
   codigoErp   String? @map("codigo_erp")
+  matrizId    String? @map("matriz_id") @db.Uuid // filial aponta para a matriz (um nivel)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  jobs   Job[]
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  matriz        Company?      @relation("MatrizFilial", fields: [tenantId, matrizId], references: [tenantId, id])
+  filiais       Company[]     @relation("MatrizFilial")
+  jobs          Job[]
+  userCompanies UserCompany[]
 
   @@unique([tenantId, cnpj])
+  @@unique([tenantId, id])
   @@index([tenantId])
+  @@index([tenantId, matrizId])
   @@map("companies")
 }
 
@@ -48,11 +58,14 @@ model User {
   role         String // CHECK em rls.sql
   passwordHash String   @map("password_hash")
   totpSecret   String?  @map("totp_secret") // criptografado em repouso
-  createdAt    DateTime @default(now()) @map("created_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  companies   UserCompany[]
+  assignments TicketAssignment[]
 
   @@unique([tenantId, email])
+  @@unique([tenantId, id])
   @@map("users")
 }
 
@@ -64,52 +77,57 @@ model Job {
   cargoErpId String?  @map("cargo_erp_id")
   fluxo      Json     @default("{}") // etapas opcionais habilitadas, SLA por etapa, nota de corte
   checklist  Json     @default("[]") // documentos exigidos
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id])
-  company Company  @relation(fields: [companyId], references: [id])
+  company Company  @relation(fields: [tenantId, companyId], references: [tenantId, id])
   tickets Ticket[]
 
+  @@unique([tenantId, id])
   @@index([tenantId, companyId])
   @@map("jobs")
 }
 
 model Candidate {
-  id                 String    @id @default(uuid(7)) @db.Uuid
-  tenantId           String    @map("tenant_id") @db.Uuid
-  cpf                String
-  nome               String
-  email              String
-  telefone           String?
-  consentimentoLgpd  DateTime? @map("consentimento_lgpd")
-  anonimizadoEm      DateTime? @map("anonimizado_em")
+  id                String    @id @default(uuid(7)) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  cpf               String
+  nome              String
+  email             String
+  telefone          String?
+  consentimentoLgpd DateTime? @map("consentimento_lgpd") @db.Timestamptz(3)
+  anonimizadoEm     DateTime? @map("anonimizado_em") @db.Timestamptz(3)
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id])
   tickets Ticket[]
 
   @@unique([tenantId, cpf])
+  @@unique([tenantId, id])
   @@map("candidates")
 }
 
 model Ticket {
-  id          String       @id @default(uuid(7)) @db.Uuid
-  tenantId    String       @map("tenant_id") @db.Uuid
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
   protocolo   String
-  jobId       String       @map("job_id") @db.Uuid
-  candidateId String       @map("candidate_id") @db.Uuid
-  status      String       @default("TRIAGEM") // CHECK em rls.sql
-  responsavel String?      @db.Uuid
-  prazoSla    DateTime?    @map("prazo_sla")
-  erpRef      String?      @map("erp_ref")
-  createdAt   DateTime     @default(now()) @map("created_at")
+  jobId       String    @map("job_id") @db.Uuid
+  candidateId String    @map("candidate_id") @db.Uuid
+  status      String    @default("TRIAGEM") // CHECK em rls.sql
+  responsavel String?   @db.Uuid
+  prazoSla    DateTime? @map("prazo_sla") @db.Timestamptz(3)
+  erpRef      String?   @map("erp_ref")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant    Tenant        @relation(fields: [tenantId], references: [id])
-  job       Job           @relation(fields: [jobId], references: [id])
-  candidate Candidate     @relation(fields: [candidateId], references: [id])
+  job       Job           @relation(fields: [tenantId, jobId], references: [tenantId, id])
+  candidate Candidate     @relation(fields: [tenantId, candidateId], references: [tenantId, id])
   events    TicketEvent[]
   messages  Message[]
+  documents Document[]
+  assignments TicketAssignment[]
 
   @@unique([tenantId, protocolo])
+  @@unique([tenantId, id])
   @@index([tenantId, status])
   @@index([jobId])
   @@index([candidateId])
@@ -127,9 +145,9 @@ model TicketEvent {
   para      String?
   motivo    String?
   payload   Json     @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  ticket Ticket @relation(fields: [ticketId], references: [id])
+  ticket Ticket @relation(fields: [tenantId, ticketId], references: [tenantId, id])
 
   @@index([ticketId, createdAt])
   @@map("ticket_events")
@@ -143,10 +161,77 @@ model Message {
   canal     String
   texto     String
   interno   Boolean  @default(false)
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  ticket Ticket @relation(fields: [ticketId], references: [id])
+  ticket Ticket @relation(fields: [tenantId, ticketId], references: [tenantId, id])
 
   @@index([ticketId, createdAt])
   @@map("messages")
+}
+
+/// Documento enviado pelo candidato. O arquivo fica no storage; aqui so metadados.
+model Document {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  ticketId     String   @map("ticket_id") @db.Uuid
+  tipo         String // CHECK na migration
+  status       String   @default("PENDENTE") // CHECK na migration
+  motivo       String?
+  chaveStorage String   @unique @map("chave_storage")
+  mime         String // CHECK na migration
+  tamanhoBytes Int      @map("tamanho_bytes")
+  sha256       String
+  enviadoEm    DateTime @default(now()) @map("enviado_em") @db.Timestamptz(3)
+  revisadoPor  String?  @map("revisado_por") @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  ticket Ticket @relation(fields: [tenantId, ticketId], references: [tenantId, id])
+
+  @@unique([tenantId, id])
+  @@index([tenantId, ticketId])
+  @@map("documents")
+}
+
+/// Vinculo usuario-empresa. Vinculo com a matriz vale para as filiais (regra no RLS).
+model UserCompany {
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  user    User    @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  company Company @relation(fields: [tenantId, companyId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([userId, companyId])
+  @@index([tenantId, companyId])
+  @@map("user_companies")
+}
+
+/// Atribuicao de um chamado a uma pessoa. Documentos exigem vinculo com a empresa E atribuicao.
+model TicketAssignment {
+  tenantId  String   @map("tenant_id") @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  ticket Ticket @relation(fields: [tenantId, ticketId], references: [tenantId, id], onDelete: Cascade)
+  user   User   @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([ticketId, userId])
+  @@index([tenantId, userId])
+  @@map("ticket_assignments")
+}
+
+/// Ultimo numero do protocolo por tenant e ano (incremento atomico via SQL).
+model ProtocolCounter {
+  tenantId String @map("tenant_id") @db.Uuid
+  ano      Int
+  ultimo   Int    @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@id([tenantId, ano])
+  @@map("protocol_counters")
 }

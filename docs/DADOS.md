@@ -137,6 +137,7 @@ erDiagram
 | `tickets` | `(tenant_id, protocolo)` | `status IN (10 valores)`; FK `job_id`, `candidate_id` | `(tenant_id, status)`, `(job_id)`, `(candidate_id)`, parcial `(tenant_id, prazo_sla) WHERE status NOT IN ('ADMITIDO','REPROVADO')` |
 | `ticket_events` | — | append-only (trigger + REVOKE) | `(ticket_id, created_at)` |
 | `messages` | — | `canal IN ('EMAIL','WHATSAPP','PORTAL')` | `(ticket_id, created_at)` |
+| `documents` | `chave_storage` | `tipo`, `status`, `mime` com CHECK; `tamanho_bytes` 1..5 MB; `sha256` hex de 64; recusado exige `motivo`; app só atualiza `status`, `motivo`, `revisado_por` | `(tenant_id, ticket_id)` |
 
 ## Regras de carga e validação
 
@@ -167,10 +168,43 @@ Premissas a validar com o piloto; abaixo de dezenas de milhões de linhas não h
 | Retenção | Candidatos reprovados/desistentes: prazo configurável por tenant, depois anonimização (`anonimizado_em`); chamados admitidos seguem a guarda trabalhista definida com o jurídico |
 | Backup | Diário, retenção a definir, em região Brasil. **Data do último treino de restauração: nunca realizado** (obrigatório antes do primeiro cliente pagante) |
 
+## Migrations
+
+| Migration | Conteúdo |
+|---|---|
+| `20261105000000_init` | Tabelas, uniques e índices gerados do `schema.prisma` (instantes em `timestamptz(3)`). FKs compostas `(tenant_id, id)` em jobs, tickets, ticket_events e messages: referência entre tenants é recusada pelo banco |
+| `20261105000100_rls_roles` | RLS `FORCE` com política `tenant_isolation`, trigger append-only, CHECKs, índice parcial de SLA, papel `kronos_app` (sem BYPASSRLS) e `REVOKE UPDATE, DELETE, TRUNCATE` em `ticket_events` |
+| `20261107000000_tenant_update_permissions` | Restringe UPDATE de `tenants` a `nome`, `cnpj` e `config`; plano e identidade ficam no provisionamento |
+| `20261107000200_documents` | Tabela `documents` (metadados; arquivo no storage) com RLS, FK composta com `tickets`, CHECKs e `kronos_app` só com SELECT, INSERT e UPDATE de `status`, `motivo`, `revisado_por`. Contém dado pessoal (documentos de identidade): acesso só por download autenticado; remoção/anonimização entra na M2 |
+| `20261107000300_acesso_por_empresa` | Acesso por empresa e por pessoa (LGPD): `companies.matriz_id` (um nível), `user_companies`, `ticket_assignments`, funções de visibilidade e políticas RLS restritivas. Exige que o papel da migration tenha BYPASSRLS (no Supabase, `postgres` já tem) |
+| `20261107000400_protocol_counters` | `protocol_counters (tenant_id, ano, ultimo)` para o protocolo `ADM-AAAA-NNNNNN`, incrementado de forma atômica (`INSERT … ON CONFLICT DO UPDATE`). Não dá para usar `max(protocolo)`: o RLS por empresa esconde chamados de outras empresas e geraria repetidos. Só isolamento por tenant (não é dado pessoal) |
+| `20261109000100_rls_escrita` | Separa **escrita de leitura** nas políticas restritivas de `tickets`, `candidates`, `documents` e `messages`: o ramo do candidato vale só para SELECT (e para enviar documento `PENDENTE` sem revisor e mensagem não interna). Criar chamado exige `can_see_job` mesmo com `candidateId` no contexto; aprovar/recusar documento exige equipe atribuída com papel RECRUTADOR/DP. `kronos_app` deixa de ler `users.password_hash` e `totp_secret` (grant por coluna) e só atualiza `protocol_counters.ultimo` |
+
+Execute o teste com `psql -f apps/api/prisma/tests/rls_isolation.sql` usando uma conexão administrativa de desenvolvimento com todas as migrations aplicadas. O script habilita `ON_ERROR_STOP`: qualquer erro encerra o processo com falha e a conexão desfaz a transação. Inclui restrições de plano/identidade, DELETE de eventos e rejeição de referência a empresa de outro tenant.
+
+Teste de isolamento: `apps/api/prisma/tests/rls_isolation.sql` (rodar num banco migrado; faz ROLLBACK). `id` é gerado pelo Prisma (UUID v7 no cliente), sem default no banco. `tenants` tem RLS pela própria `id`; o `kronos_app` só faz SELECT e UPDATE nela (criar tenant é provisionamento, fora da aplicação). `kronos_migrator` e a senha do `kronos_app` ficam por ambiente, fora do repositório.
+
 ## Perguntas em aberto
 
 - Nomes e ordem exatos dos 10 status: conferir com o diagrama do PDF (era imagem) e ajustar o `CHECK` e `ticket-status.ts` juntos.
-- Tabelas ainda não modeladas: `document_types`, `documents`, `admission_data`, `erp_connections`, `erp_syncs`, `erp_lookups`, `tests*`, `signature_requests`, `contract_templates`, `uniform_*`, contador de protocolo. Entram em migrations próprias por módulo.
-- FKs compostas `(tenant_id, id)` para impedir referência cruzada entre tenants (o RLS filtra linhas, mas não impede um `job_id` de outro tenant). Decidir antes da primeira migration.
+- Tabelas ainda não modeladas: `document_types`, `admission_data`, `erp_connections`, `erp_syncs`, `erp_lookups`, `tests*`, `signature_requests`, `contract_templates`, `uniform_*`. Entram em migrations próprias por módulo.
 - Prazo de retenção da guarda de documentos admissionais (jurídico).
 - Meta de RPO/RTO do backup.
+
+
+## Acesso por empresa e por pessoa autorizada (LGPD)
+
+Além do isolamento por tenant, os dados de uma empresa ficam fechados para ela. O banco aplica a regra (políticas RLS **restritivas**, somadas com AND ao isolamento por tenant); a API só informa o contexto de cada transação: `app.tenant_id`, `app.user_id`, `app.user_role` e, no portal, `app.candidate_id`. Sem contexto, nenhuma linha é devolvida.
+
+| Quem | O que enxerga |
+|---|---|
+| Usuário vinculado a uma **filial** | Só a própria filial |
+| Usuário vinculado à **matriz** | A matriz e todas as filiais (o inverso não vale) |
+| Usuário sem vínculo com a empresa | Nada dela: nem vagas, chamados, candidatos, eventos, mensagens ou documentos |
+| **ADMIN** | Gere cadastro de empresas, usuários e vínculos, mas **não** vê chamados, candidatos, vagas nem documentos |
+| Documentos | Exigem vínculo com a empresa **e** atribuição ao chamado (`ticket_assignments`) |
+| **Candidato** | Só o próprio cadastro, chamados, documentos e mensagens não internas |
+
+Garantias no banco: ninguém se vincula nem se atribui sozinho (só ADMIN vincula; só RECRUTADOR/DP que opera o chamado atribui); atribuir exige que o atribuído já tenha vínculo com a empresa; matriz não pode ser filial e filial não tem filiais.
+
+Premissas: quem cria o candidato declara `app.candidate_id` com o id novo (o `INSERT ... RETURNING` precisa enxergar a linha); o que cada papel *faz* (aprovar documento, avançar status) continua na API; a decisão do RH em documentos limita-se, por GRANT, às colunas `status`, `motivo` e `revisado_por`, e o banco (migration `20261109000100_rls_escrita`) recusa que o candidato altere chamado, decida o próprio documento ou apague o cadastro; a API continua sendo a primeira barreira. O login futuro lerá `password_hash`/`totp_secret` por função `SECURITY DEFINER` própria, não pelo papel `kronos_app`. O teste `apps/api/prisma/tests/rls_isolation.sql` cobre matriz/filial, ADMIN, atribuição, candidato e tenants.
