@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read # gitleaks-action lista os commits do PR
 
 jobs:
   secrets-scan:
