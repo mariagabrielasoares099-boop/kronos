@@ -73,6 +73,8 @@ describe.skipIf(!ADMIN || !APP)('API de documentos (HTTP + RLS)', () => {
       await q(`INSERT INTO tickets (id, tenant_id, protocolo, job_id, candidate_id, status) VALUES ($1,$2,$3,$4,$5,'TRIAGEM')`, [tk, t, p, j, c]);
     }
     // Somente rhA esta atribuido ao chamado (documentos exigem vinculo com a empresa E atribuicao).
+    // A trigger de atribuicao consulta o vinculo pelo tenant da sessao.
+    await q(`SELECT set_config('app.tenant_id', $1, false)`, [T]);
     await q(`INSERT INTO ticket_assignments (tenant_id, ticket_id, user_id) VALUES ($1,$2,$3)`, [T, chamado, rhA]);
 
     const { AppModule } = await import('../app.module.js');
@@ -133,7 +135,7 @@ describe.skipIf(!ADMIN || !APP)('API de documentos (HTTP + RLS)', () => {
     for (const t of [tCandOutro, tOutroTenant, tRhB]) {
       await http.get(`/chamados/${chamado}/documentos`).set('Authorization', t).expect(404);
       await http.get(`/documentos/${docId}/arquivo`).set('Authorization', t).expect(404);
-      await http.patch(`/documentos/${docId}`).set('Authorization', t).send({ status: 'APROVADO' }).expect(404);
+      await http.patch(`/documentos/${docId}`).set('Authorization', t).send({ status: 'APROVADO' }).expect(t === tCandOutro ? 403 : 404); // candidato nem chega a consultar
     }
   });
 
