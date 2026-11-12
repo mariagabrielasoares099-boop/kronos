@@ -1,47 +1,102 @@
-:root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6570; --brand:#1f4fd8; --ok:#16794a; --err:#b42318; --card:#fff; --line:#dde1e6; }
+/* Layout inspirado em ATS corporativos: menu lateral escuro, barra superior, cards e tabelas com etiquetas. Sem marca de terceiros. */
+:root { --bg:#eef1f5; --fg:#1f2d3a; --muted:#5f6f7e; --brand:#0c9abe; --brand-dark:#087a99; --nav:#0d2538; --nav-2:#143450;
+  --ok:#14804a; --err:#c0392b; --card:#fff; --line:#dbe1e8; --shadow:0 1px 3px rgba(13,37,56,.08); }
 * { box-sizing: border-box; }
-body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
-main { max-width: 960px; margin: 0 auto; padding: 16px; }
-.top { display:flex; gap:16px; align-items:center; padding:12px 16px; background:var(--card); border-bottom:1px solid var(--line); }
-.brand { font-weight:700; color:var(--brand); text-decoration:none; }
-.demo { background:#fff3cd; color:#664d03; padding:6px 16px; font-size:14px; }
-.cards { list-style:none; padding:0; display:grid; gap:12px; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 16px; }
-.form { display:grid; gap:14px; max-width:480px; }
-label { display:grid; gap:4px; font-weight:600; }
-label.check { display:flex; gap:8px; font-weight:400; }
-input:not([type=checkbox]) { padding:12px; font-size:16px; border:1px solid var(--line); border-radius:6px; }
-button { padding:12px 16px; font-size:16px; background:var(--brand); color:#fff; border:0; border-radius:6px; cursor:pointer; }
-.erro { color:var(--err); font-weight:400; font-size:14px; }
-.ok { color:var(--ok); font-weight:400; font-size:14px; }
-.alerta { background:#fde8e8; border:1px solid #f5b5b5; padding:8px 12px; border-radius:6px; }
-.kanban { display:flex; gap:12px; overflow-x:auto; padding-bottom:12px; }
-.col { min-width:220px; background:#eceff3; border-radius:8px; padding:8px; }
-.col h2 { font-size:14px; margin:4px 4px 8px; }
-.ticket { display:block; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px; color:inherit; text-decoration:none; font-size:14px; }
-footer { max-width:960px; margin:24px auto; padding:0 16px; color:var(--muted); font-size:13px; }
-@media (max-width: 600px) { main { padding: 12px; } }
-.filtros { display:flex; gap:12px; flex-wrap:wrap; margin:12px 0; }
-.filtros select { padding:12px; font-size:16px; border:1px solid var(--line); border-radius:6px; }
-.fila { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); }
-.fila th, .fila td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); font-size:14px; }
-.sla { padding:2px 8px; border-radius:10px; font-size:12px; font-weight:600; }
-.sla-atrasado { background:#fde8e8; color:var(--err); }
-.sla-vencendo { background:#fff3cd; color:#664d03; }
-.sla-no_prazo { background:#e3f5ec; color:var(--ok); }
+body { margin:0; font:15px/1.5 "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+a { color:var(--brand-dark); }
+:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
+.demo { background:#fff3cd; color:#664d03; padding:6px 16px; font-size:13px; text-align:center; }
+
+/* Estrutura */
+.app { display:flex; min-height:100vh; }
+.content { flex:1; min-width:0; display:flex; flex-direction:column; }
+main { flex:1; width:100%; max-width:1100px; margin:0 auto; padding:24px 20px; }
+.area-candidato main { max-width:860px; }
+footer { padding:16px 20px; color:var(--muted); font-size:13px; text-align:center; }
+
+/* Menu lateral */
+.side { width:232px; flex:none; background:var(--nav); color:#cfdae5; padding:0 0 16px; }
+.logo { display:block; padding:18px 20px; color:#fff; font-weight:700; font-size:20px; letter-spacing:.08em; text-decoration:none; border-bottom:1px solid var(--nav-2); }
+.logo small { display:block; font-weight:400; font-size:11px; letter-spacing:0; color:#8fb0c9; margin-top:2px; }
+.side nav { display:grid; padding-top:8px; }
+.side nav a { color:#cfdae5; text-decoration:none; padding:11px 20px; border-left:3px solid transparent; font-size:14px; }
+.side nav a:hover { background:var(--nav-2); color:#fff; }
+.side nav a.on { background:var(--nav-2); color:#fff; border-left-color:var(--brand); font-weight:600; }
+
+/* Barra superior */
+.bar { display:flex; align-items:center; gap:14px; min-height:56px; padding:0 20px; background:var(--card); border-bottom:1px solid var(--line); box-shadow:var(--shadow); }
+.bar .crumb { font-weight:600; color:var(--fg); flex:1; }
+.area-candidato .bar .crumb { color:var(--muted); font-weight:400; }
+.brand { font-weight:700; font-size:18px; letter-spacing:.08em; color:var(--brand-dark); text-decoration:none; }
+.bar-link { font-size:14px; font-weight:600; text-decoration:none; }
+.user { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); }
+.avatar { width:30px; height:30px; border-radius:50%; background:var(--brand); color:#fff; display:grid; place-items:center; font-size:12px; font-weight:700; }
+
+h1 { font-size:22px; margin:0 0 6px; font-weight:600; }
+h1 small { font-size:15px; color:var(--muted); font-weight:400; margin-left:6px; }
+h2 { font-size:16px; margin:22px 0 8px; font-weight:600; }
 .muted { color:var(--muted); font-size:14px; }
+
+/* Cards, formularios e botoes */
+.cards { list-style:none; padding:0; display:grid; gap:12px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:14px 18px; box-shadow:var(--shadow); }
+.card h2 { margin:0 0 2px; }
+.form { display:grid; gap:14px; max-width:480px; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:18px; box-shadow:var(--shadow); }
+label { display:grid; gap:4px; font-weight:600; font-size:14px; }
+label.check { display:flex; gap:8px; font-weight:400; }
+input:not([type=checkbox]), select { padding:10px 12px; font-size:15px; border:1px solid var(--line); border-radius:4px; background:#fff; color:var(--fg); font-family:inherit; }
+input:focus, select:focus { border-color:var(--brand); }
+button { padding:10px 18px; font-size:14px; font-weight:600; background:var(--brand); color:#fff; border:0; border-radius:4px; cursor:pointer; font-family:inherit; }
+button:hover { background:var(--brand-dark); }
+.erro { color:var(--err); font-weight:400; font-size:13px; }
+.ok { color:var(--ok); font-weight:400; font-size:13px; }
+.alerta { background:#fdecea; border:1px solid #f3b7b0; border-left:4px solid var(--err); padding:8px 12px; border-radius:4px; }
+.status { margin:6px 0 12px; }
+
+/* Quadro (kanban) */
+.kanban { display:flex; gap:12px; overflow-x:auto; padding-bottom:12px; }
+.col { min-width:230px; background:#e3e8ee; border-radius:6px; padding:8px; border-top:3px solid var(--brand); }
+.col h2 { font-size:12px; margin:4px 4px 10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+.ticket { display:block; background:var(--card); border:1px solid var(--line); border-radius:4px; padding:10px; margin-bottom:8px; color:inherit; text-decoration:none; font-size:14px; box-shadow:var(--shadow); }
+.ticket:hover { border-color:var(--brand); }
+
+/* Fila (tabela) */
+.filtros { display:flex; gap:12px; flex-wrap:wrap; margin:12px 0; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:12px 14px; box-shadow:var(--shadow); }
+.filtros input { min-width:240px; }
+.fila { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); box-shadow:var(--shadow); }
+.fila th { background:#f6f8fa; color:var(--muted); text-transform:uppercase; font-size:11px; letter-spacing:.06em; }
+.fila th, .fila td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); font-size:14px; }
+.fila tbody tr:hover { background:#f2fafc; }
+.sla, .badge { padding:2px 10px; border-radius:10px; font-size:12px; font-weight:600; white-space:nowrap; }
+.sla-atrasado { background:#fdecea; color:var(--err); }
+.sla-vencendo { background:#fff3cd; color:#7a5700; }
+.sla-no_prazo { background:#e0f3e8; color:var(--ok); }
+
+/* Detalhe: documentos e linha do tempo */
 .checklist { list-style:none; padding:0; display:grid; gap:8px; }
-.item { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--line); border-radius:6px; padding:10px 14px; }
-.item-aprovado { border-left-color:var(--ok); }
-.item-recusado { border-left-color:var(--err); }
-.item-pendente { border-left-color:#d4a017; }
+.item { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--line); border-radius:4px; padding:10px 14px; box-shadow:var(--shadow); }
+.item-aprovado { border-left-color:var(--ok); } .item-recusado { border-left-color:var(--err); } .item-pendente { border-left-color:#d4a017; }
 .item-topo { display:flex; justify-content:space-between; gap:8px; align-items:center; }
-.badge { padding:2px 10px; border-radius:10px; font-size:12px; font-weight:600; background:#eceff3; color:var(--muted); }
-.badge-aprovado { background:#e3f5ec; color:var(--ok); }
-.badge-recusado { background:#fde8e8; color:var(--err); }
-.badge-pendente { background:#fff3cd; color:#664d03; }
+.badge { background:#e8edf2; color:var(--muted); }
+.badge-aprovado { background:#e0f3e8; color:var(--ok); } .badge-recusado { background:#fdecea; color:var(--err); } .badge-pendente { background:#fff3cd; color:#7a5700; }
 .decisao { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
-.decisao input { flex:1 1 220px; padding:10px; font-size:15px; border:1px solid var(--line); border-radius:6px; }
-.btn-ok { background:var(--ok); } .btn-err { background:var(--err); }
+.decisao input { flex:1 1 220px; }
+.btn-ok { background:var(--ok); } .btn-ok:hover { background:#0f6a3d; }
+.btn-err { background:var(--err); } .btn-err:hover { background:#a22f23; }
 .acoes { margin:20px 0; }
-select { padding:12px; font-size:16px; border:1px solid var(--line); border-radius:6px; }
+.timeline { list-style:none; margin:0; padding:0 0 0 16px; border-left:2px solid var(--line); display:grid; gap:8px; }
+.timeline li { position:relative; font-size:14px; }
+.timeline li::before { content:""; position:absolute; left:-22px; top:7px; width:10px; height:10px; border-radius:50%; background:var(--brand); }
+
+@media (max-width: 760px) {
+  .app { flex-direction:column; }
+  .side { width:100%; padding:0; }
+  .logo { padding:12px 16px; border-bottom:0; }
+  .side nav { display:flex; overflow-x:auto; padding:0; }
+  .side nav a { white-space:nowrap; border-left:0; border-bottom:3px solid transparent; }
+  .side nav a.on { border-bottom-color:var(--brand); }
+  main { padding:16px 12px; }
+  .fila { display:block; overflow-x:auto; }
+  .filtros input { min-width:0; width:100%; }
+}
+@media (prefers-reduced-motion: no-preference) { .ticket, .side nav a, button { transition: background .15s, border-color .15s; } }
