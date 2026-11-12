@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ chamado.protocolo }} - Painel do RH - KRONOS{% endblock %}
+{% block content %}
+<p><a href="/painel/fila">&larr; Voltar para a fila</a></p>
+<h1>{{ chamado.protocolo }} <small>{{ chamado.nome }}</small></h1>
+<p class="muted">Vaga: {{ vaga.titulo if vaga else '-' }} &middot; Responsavel: {{ chamado.responsavel or '-' }}
+  {% if sla != 'sem_sla' %}&middot; <span class="sla sla-{{ sla }}">{{ sla_labels[sla] }}</span>{% endif %}</p>
+<p class="status">Situacao: <strong>{{ labels[chamado.status] }}</strong></p>
+
+{% include "_docs_rh.html" %}
+
+<div class="acoes">
+  {% if acao %}
+  <form method="post" action="/painel/chamado/{{ chamado.protocolo }}/avancar"><button>{{ acao }}</button></form>
+  {% else %}<p class="muted">Chamado encerrado.</p>{% endif %}
+</div>
+
+<h2>Linha do tempo</h2>
+<ol class="timeline">
+  {% for st, motivo in chamado.historico %}
+  <li><strong>{{ labels[st] }}</strong> &mdash; {{ motivo }}</li>
+  {% endfor %}
+</ol>
+{% endblock %}

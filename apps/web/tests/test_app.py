@@ -134,3 +134,89 @@ def test_fila_rejeita_status_invalido_e_escapa_busca():
     assert c.get("/painel/fila/tabela", params={"status": "HACK"}).status_code == 422
     r = c.get("/painel/fila", params={"busca": '"><script>alert(1)</script>'})
     assert "<script>alert(1)</script>" not in r.text
+
+
+# --- Detalhe do chamado no RH e documentos ---------------------------------------
+PDF = b"%PDF-1.7\nconteudo de teste"
+PNG = b"\x89PNG\r\n\x1a\n\x00\x00"
+
+
+def upload(c, protocolo, conteudo, tipo="RG", nome="x.pdf"):
+    return c.post(f"/chamado/{protocolo}/documentos", data={"tipo": tipo}, files={"arquivo": (nome, conteudo, "application/pdf")})
+
+
+def test_candidato_envia_documento_e_ve_o_checklist():
+    c = make()
+    p = c.post("/vagas/v1/candidatar", data=VALID).headers["location"].rsplit("/", 1)[1]
+    assert "Faltando" in c.get(f"/chamado/{p}").text
+    r = upload(c, p, PDF)
+    assert r.status_code == 303
+    assert "Em analise" in c.get(f"/chamado/{p}").text
+
+
+@pytest.mark.parametrize("conteudo", [b"MZ\x90\x00", b"<html><script>", b"", b"x" * (5 * 1024 * 1024 + 1)])
+def test_upload_rejeita_conteudo_invalido_mesmo_com_nome_pdf(conteudo):
+    c = make()
+    p = c.post("/vagas/v1/candidatar", data=VALID).headers["location"].rsplit("/", 1)[1]
+    assert upload(c, p, conteudo, nome="inocente.pdf").status_code == 422
+    assert "Em analise" not in c.get(f"/chamado/{p}").text
+
+
+def test_upload_nao_ecoa_o_nome_do_arquivo():
+    c = make()
+    p = c.post("/vagas/v1/candidatar", data=VALID).headers["location"].rsplit("/", 1)[1]
+    upload(c, p, PNG, nome="<script>alert(1)</script>.png")
+    assert "<script>alert(1)</script>" not in c.get(f"/chamado/{p}").text
+
+
+def test_upload_tipo_invalido_e_chamado_inexistente():
+    c = make()
+    p = c.post("/vagas/v1/candidatar", data=VALID).headers["location"].rsplit("/", 1)[1]
+    assert upload(c, p, PDF, tipo="PASSAPORTE").status_code == 422
+    assert upload(c, "ADM-2026-999999", PDF).status_code == 404
+
+
+def test_detalhe_do_rh_mostra_documentos_e_linha_do_tempo():
+    r = make().get("/painel/chamado/ADM-2026-000001")
+    assert r.status_code == 200
+    assert "Aguardando decisao" in r.text and "Linha do tempo" in r.text and "Documentos recebidos" in r.text
+
+
+def test_rh_aprova_e_recusa_com_motivo_via_htmx():
+    c = make()
+    ok = c.post("/painel/documentos/d1/decisao", data={"acao": "aprovar"})
+    assert ok.status_code == 200 and "Aprovado" in ok.text
+    sem_motivo = c.post("/painel/documentos/d2/decisao", data={"acao": "recusar", "motivo": ""})
+    assert "motivo da recusa" in sem_motivo.text and "Recusado" not in sem_motivo.text
+    rec = c.post("/painel/documentos/d2/decisao", data={"acao": "recusar", "motivo": "Foto ilegivel"})
+    assert "Recusado" in rec.text and "Foto ilegivel" in rec.text
+    assert "ja foi decidido" in c.post("/painel/documentos/d1/decisao", data={"acao": "recusar", "motivo": "tarde demais"}).text
+
+
+def test_decisao_valida_acao_e_documento():
+    c = make()
+    assert c.post("/painel/documentos/d1/decisao", data={"acao": "apagar"}).status_code == 422
+    assert c.post("/painel/documentos/nao-existe/decisao", data={"acao": "aprovar"}).status_code == 404
+
+
+def test_candidato_ve_motivo_da_recusa():
+    c = make()
+    c.post("/painel/documentos/d3/decisao", data={"acao": "recusar", "motivo": "Conta antiga"})
+    assert "Conta antiga" in c.get("/chamado/ADM-2026-000001").text
+
+
+def test_avancar_percorre_o_fluxo_ate_admitido():
+    c = make()
+    p = "ADM-2026-000001"
+    for _ in range(3):  # VALIDACAO_DP -> ASSINATURA -> ENVIO_ERP -> ADMITIDO
+        assert c.post(f"/painel/chamado/{p}/avancar").status_code == 303
+    page = c.get(f"/painel/chamado/{p}").text
+    assert "Admitido" in page and "Chamado encerrado" in page
+    assert c.post(f"/painel/chamado/{p}/avancar").status_code == 409
+
+
+def test_rotas_do_rh_somem_fora_do_modo_demo():
+    c = make(demo=False)
+    assert c.get("/painel/chamado/ADM-2026-000001").status_code == 404
+    assert c.post("/painel/documentos/d1/decisao", data={"acao": "aprovar"}).status_code == 404
+    assert c.post("/painel/chamado/ADM-2026-000001/avancar").status_code == 404

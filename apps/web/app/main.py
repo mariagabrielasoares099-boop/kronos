@@ -1,13 +1,14 @@
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import Settings, load_settings
 from .fila import filtrar, sla_situacao
-from .gateway import STATUS_LABELS, STATUSES, DemoGateway, Gateway
+from .gateway import ACAO_AVANCAR, CHECKLIST, PROXIMO, STATUS_LABELS, STATUSES, TIPOS_DOCUMENTO, DemoGateway, Gateway
+from .uploads import MAX_BYTES, ArquivoInvalido, validar_arquivo
 from .security import RateLimiter, SecurityHeadersMiddleware
 from .validators import is_valid_cpf, is_valid_email, only_digits
 
@@ -26,7 +27,7 @@ def create_app(settings: Settings | None = None, gateway: Gateway | None = None)
     app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
     def render(request: Request, name: str, status_code: int = 200, **ctx) -> HTMLResponse:
-        ctx.update(demo=cfg.demo_mode, labels=STATUS_LABELS)
+        ctx.update(demo=cfg.demo_mode, labels=STATUS_LABELS, tipos=TIPOS_DOCUMENTO)
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
     @app.get("/health")
@@ -86,7 +87,37 @@ def create_app(settings: Settings | None = None, gateway: Gateway | None = None)
         c = gw.obter_chamado(protocolo)
         if not c:
             raise HTTPException(404)
-        return render(request, "chamado.html", chamado=c, vaga=gw.obter_vaga(c.vaga_id))
+        return render(request, "chamado.html", chamado=c, vaga=gw.obter_vaga(c.vaga_id), checklist=checklist_de(c), erro=None)
+
+    @app.post("/chamado/{protocolo}/documentos", response_class=HTMLResponse)
+    def enviar_documento(request: Request, protocolo: str, tipo: str = Form("", max_length=30), arquivo: UploadFile = File(...)):
+        c = gw.obter_chamado(protocolo)
+        if not c:
+            raise HTTPException(404)
+        ip = request.client.host if request.client else "?"
+        if not limiter.allow(f"upload:{ip}"):
+            raise HTTPException(429, "Muitas tentativas. Aguarde um minuto.")
+        erro = None
+        if tipo not in TIPOS_DOCUMENTO:
+            erro = "Escolha o tipo do documento."
+        else:
+            try:
+                validar_arquivo(arquivo.file.read(MAX_BYTES + 1))  # so valida; o demo guarda apenas os metadados
+            except ArquivoInvalido as e:
+                erro = str(e)
+        if erro:
+            return render(request, "chamado.html", status_code=422, chamado=c, vaga=gw.obter_vaga(c.vaga_id),
+                          checklist=checklist_de(c), erro=erro)
+        gw.enviar_documento(protocolo, tipo, "arquivo-enviado")  # nunca guarda/ecoa o nome enviado pelo usuario
+        return RedirectResponse(f"/chamado/{protocolo}", status_code=303)
+
+    def checklist_de(c) -> list[dict]:
+        """Cada item do checklist mostra o status do ultimo envio daquele tipo."""
+        itens = []
+        for tipo in CHECKLIST:
+            ultimo = next((d for d in reversed(c.documentos) if d.tipo == tipo), None)
+            itens.append({"tipo": tipo, "doc": ultimo, "status": ultimo.status if ultimo else "FALTANDO"})
+        return itens
 
     @app.get("/painel", response_class=HTMLResponse)
     def painel(request: Request):
@@ -116,6 +147,44 @@ def create_app(settings: Settings | None = None, gateway: Gateway | None = None)
         if not cfg.demo_mode:
             raise HTTPException(404)
         return render(request, "_fila_tabela.html", **montar_fila(status, busca))
+
+    def so_demo() -> None:  # mesma regra do /painel ate existir login + 2FA
+        if not cfg.demo_mode:
+            raise HTTPException(404)
+
+    def render_docs(request: Request, c, erro: str | None = None):
+        return render(request, "_docs_rh.html", chamado=c, checklist=checklist_de(c), erro=erro)
+
+    @app.get("/painel/chamado/{protocolo}", response_class=HTMLResponse)
+    def painel_chamado(request: Request, protocolo: str):
+        so_demo()
+        c = gw.obter_chamado(protocolo)
+        if not c:
+            raise HTTPException(404)
+        return render(request, "painel_chamado.html", chamado=c, vaga=gw.obter_vaga(c.vaga_id), checklist=checklist_de(c),
+                      erro=None, acao=ACAO_AVANCAR.get(c.status), sla=sla_situacao(c), sla_labels=SLA_LABELS)
+
+    @app.post("/painel/documentos/{doc_id}/decisao", response_class=HTMLResponse)
+    def decidir_documento(request: Request, doc_id: str, acao: str = Form("", max_length=10), motivo: str = Form("", max_length=500)):
+        so_demo()
+        achado = gw.obter_documento(doc_id)
+        if not achado:
+            raise HTTPException(404)
+        c, d = achado
+        if acao not in ("aprovar", "recusar"):
+            raise HTTPException(422, "Acao invalida")
+        if acao == "recusar" and len(motivo.strip()) < 3:
+            return render_docs(request, c, "Informe o motivo da recusa (minimo 3 caracteres).")
+        if gw.decidir_documento(doc_id, acao == "aprovar", motivo) is None:
+            return render_docs(request, c, "Este documento ja foi decidido.")
+        return render_docs(request, c)
+
+    @app.post("/painel/chamado/{protocolo}/avancar")
+    def avancar(protocolo: str):
+        so_demo()
+        if gw.avancar(protocolo) is None:
+            raise HTTPException(409, "Este chamado nao pode avancar")
+        return RedirectResponse(f"/painel/chamado/{protocolo}", status_code=303)
 
     return app
 

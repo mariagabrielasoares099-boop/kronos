@@ -8,7 +8,7 @@
   <section class="col">
     <h2>{{ labels[st] }} <small>({{ itens|length }})</small></h2>
     {% for c in itens %}
-    <a class="ticket" href="/chamado/{{ c.protocolo }}">
+    <a class="ticket" href="/painel/chamado/{{ c.protocolo }}">
       <strong>{{ c.protocolo }}</strong><br>{{ c.nome }}
     </a>
     {% endfor %}

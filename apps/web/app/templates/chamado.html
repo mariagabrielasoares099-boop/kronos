@@ -7,6 +7,30 @@
 {% if chamado.status == 'AGUARDANDO_CANDIDATO' %}
   <p class="alerta">Ha documentos pendentes. Envie-os para continuar.</p>
 {% endif %}
+
+<h2>Seus documentos</h2>
+{% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
+<ul class="checklist">
+  {% for item in checklist %}
+  <li class="item item-{{ item.status|lower }}">
+    <div class="item-topo"><strong>{{ tipos[item.tipo] }}</strong>
+      <span class="badge badge-{{ item.status|lower }}">{{ {'FALTANDO': 'Faltando', 'PENDENTE': 'Em analise', 'APROVADO': 'Aprovado', 'RECUSADO': 'Recusado'}[item.status] }}</span></div>
+    {% if item.doc and item.doc.status == 'RECUSADO' %}<p class="muted">Recusado: {{ item.doc.motivo }}. Envie novamente.</p>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<form class="form" method="post" action="/chamado/{{ chamado.protocolo }}/documentos" enctype="multipart/form-data">
+  <label>Tipo
+    <select name="tipo" required>
+      {% for k, nome in tipos.items() %}<option value="{{ k }}">{{ nome }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Arquivo (JPG, PNG ou PDF, ate 5 MB)
+    <input type="file" name="arquivo" accept="image/jpeg,image/png,application/pdf" required>
+  </label>
+  <button>Enviar documento</button>
+</form>
+
 <h2>Historico</h2>
 <ol class="timeline">
   {% for st, motivo in chamado.historico %}
