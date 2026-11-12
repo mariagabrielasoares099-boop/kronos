@@ -13,7 +13,7 @@ npm run dev:web                                     # http://localhost:8000 (mod
 Abra `http://localhost:8000` numa janela limpa (zoom 110–125%, sem outras abas). Reinicie o servidor antes de gravar: os dados do demo ficam em memória e voltam ao estado inicial.
 
 ## O que o demo mostra
-O fluxo **candidato → documentos → RH decide → admissão**, no **modo demo** do front (FastAPI + HTMX). Os dados são fictícios e a regra oficial (transições, RLS, SLA) pertence à API NestJS, que aparece no bloco 5.
+O fluxo **candidato → documentos → RH decide → admissão**, no **modo demo** do front (FastAPI + HTMX). Os dados são fictícios e a regra oficial (transições, RLS, SLA) pertence à API NestJS, que aparece no bloco 8.
 
 ## Roteiro (≈ 3 min)
 
