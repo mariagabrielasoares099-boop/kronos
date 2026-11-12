@@ -27,3 +27,7 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 .aider*
+
+# Documentos enviados (dados pessoais): nunca versionar
+apps/api/storage/
+storage/
