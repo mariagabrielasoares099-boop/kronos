@@ -15,7 +15,7 @@ const CH = '33333333-3333-4333-8333-333333333333';
 const ctx: DbContext = { tenantId: T, userId: U, role: 'RECRUTADOR' };
 const PDF = Buffer.from('%PDF-1.7\nconteudo');
 
-function montar(opcoes: { visivel?: boolean; gravaDecisao?: boolean } = {}) {
+function montar(opcoes: { visivel?: boolean; gravaDecisao?: boolean; erroCommit?: Error } = {}) {
   const docs = new Map<string, Documento>();
   const salvos: Buffer[] = [];
   const removidos: number[] = [];
@@ -26,7 +26,13 @@ function montar(opcoes: { visivel?: boolean; gravaDecisao?: boolean } = {}) {
     obterPorId: async (id) => docs.get(id) ?? null,
     salvarDecisao: async () => opcoes.gravaDecisao ?? true,
   };
-  const uow: DocumentosUnitOfWork = { executar: (_c, fn) => fn(repo) };
+  const uow: DocumentosUnitOfWork = {
+    executar: async (_c, fn) => {
+      const resultado = await fn(repo);
+      if (opcoes.erroCommit) throw opcoes.erroCommit;
+      return resultado;
+    },
+  };
   const storage: StoragePort = {
     salvar: async (_t, c) => (salvos.push(c), `${T}/44444444-4444-4444-8444-444444444444`),
     ler: async () => PDF,
@@ -61,6 +67,14 @@ describe('DocumentosService', () => {
     const { service, repo, removidos } = montar();
     repo.inserir = async () => { throw new EnvioNegadoError(); };
     await expect(service.enviar(ctx, CH, 'RG', PDF)).rejects.toThrow(EnvioNegadoError);
+    expect(removidos).toHaveLength(1);
+  });
+
+  it('remove o arquivo se a transacao falhar depois de inserir os metadados', async () => {
+    const erro = new Error('Transacao expirada antes do commit');
+    const { service, salvos, removidos } = montar({ erroCommit: erro });
+    await expect(service.enviar(ctx, CH, 'RG', PDF)).rejects.toBe(erro);
+    expect(salvos).toHaveLength(1);
     expect(removidos).toHaveLength(1);
   });
 

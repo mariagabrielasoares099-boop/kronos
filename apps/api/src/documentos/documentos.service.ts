@@ -41,21 +41,24 @@ export class DocumentosService {
   /** Valida o conteudo (ArquivoInvalidoError sobe), confere acesso ao chamado, grava o arquivo e os metadados. */
   async enviar(ctx: DbContext, chamadoId: string, tipo: TipoDocumento, conteudo: Buffer, agora = new Date()): Promise<DocumentoView> {
     const arq = validarArquivo(conteudo);
-    return this.uow.executar(ctx, async (repo) => {
-      if (!(await repo.chamadoVisivel(chamadoId))) throw new ChamadoInacessivelError();
-      const chaveStorage = await this.storage.salvar(ctx.tenantId, conteudo);
-      const doc = Documento.receber({
-        id: randomUUID(), tenantId: ctx.tenantId, chamadoId, tipo, chaveStorage,
-        mime: arq.mime, tamanhoBytes: arq.tamanhoBytes, sha256: arq.sha256, enviadoEm: agora,
-      });
-      try {
+    let chaveSalva: string | undefined;
+    try {
+      return await this.uow.executar(ctx, async (repo) => {
+        if (!(await repo.chamadoVisivel(chamadoId))) throw new ChamadoInacessivelError();
+        const chaveStorage = await this.storage.salvar(ctx.tenantId, conteudo);
+        chaveSalva = chaveStorage;
+        const doc = Documento.receber({
+          id: randomUUID(), tenantId: ctx.tenantId, chamadoId, tipo, chaveStorage,
+          mime: arq.mime, tamanhoBytes: arq.tamanhoBytes, sha256: arq.sha256, enviadoEm: agora,
+        });
         await repo.inserir(doc);
-      } catch (e) {
-        await this.storage.remover(chaveStorage).catch(() => undefined); // nao deixa arquivo orfao
-        throw e;
-      }
-      return view(doc);
-    });
+        return view(doc);
+      });
+    } catch (e) {
+      // A transacao tambem pode falhar depois do callback, ao efetivar o commit.
+      if (chaveSalva) await this.storage.remover(chaveSalva).catch(() => undefined);
+      throw e;
+    }
   }
 
   async listar(ctx: DbContext, chamadoId: string) {
