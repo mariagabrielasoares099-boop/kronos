@@ -53,14 +53,18 @@ Atenção ao custo zero: armazenamento em disco local (ou MinIO no compose), atr
 ## Etapa 3 — Tela da fila do RH
 **Módulos:** 05 · **Onde:** `apps/web/app/` (`painel.html`, `chamado.html`) e gateway para a API
 
-Já existe: rota `/painel` em modo demo.
+Já existe: rota `/painel` em modo demo e, fora dele, o painel pela API real (login da equipe, fila, detalhe, decisão de documentos e avanço), em master-detail (lista à esquerda, chamado à direita; empilha no celular).
 
-- [ ] Fila com colunas: protocolo, candidato, vaga, status, responsável, SLA (atrasado/no prazo)
-- [ ] Filtro por status e busca por protocolo/CPF
-- [ ] Detalhe do chamado: linha do tempo (`ticket_events`) + lista de documentos com visualizar/aprovar/recusar (HTMX, sem recarregar a página)
-- [ ] Ação "Enviar ao ERP" habilitada só em `VALIDACAO_DP`/`ASSINATURA` conforme o fluxo (a trava forte por documento aprovado fica na M2)
-- [ ] Substituir os dados do modo demo por chamadas ao gateway quando `DEMO_MODE=false`
-- [ ] Testes `pytest` das rotas e dos fragmentos HTMX
+- [x] Login da equipe: `/login` (e-mail, senha e código 2FA → `POST /auth/login`), cookie `kronos_equipe` HttpOnly/SameSite=Lax, `/sair`; `/painel*` redireciona ao login sem sessão (inclusive nas ações HTMX)
+- [x] Fila com colunas: protocolo, candidato, status, responsável, SLA (atrasado/vence em 24h/no prazo); a vaga aparece no detalhe
+- [x] Filtro por status e busca por protocolo, nome ou CPF (a API filtra e ordena por SLA: `GET /chamados`)
+- [x] Detalhe do chamado: linha do tempo (`GET /chamados/:id/eventos`) + documentos com baixar/aprovar/recusar (HTMX, sem recarregar a página); o arquivo vem pela API com o token da pessoa (`/painel/chamado/:protocolo/documentos/:id/arquivo`, anexo, sem URL pública)
+- [x] Avançar o chamado pela tela (`POST /chamados/:id/transicoes`); a linha da fila acompanha o novo status
+- [ ] Ação "Enviar ao ERP": o botão do status `ASSINATURA` só avança o status; a exportação real é a etapa 4 (a trava forte por documento aprovado fica na M2)
+- [x] Substituir os dados do modo demo por chamadas à API quando `DEMO_MODE=false`
+- [x] Testes `pytest` das rotas e dos fragmentos HTMX (`tests/test_equipe.py`, com a API simulada) e roteiro em navegador contra API e portal reais (desktop e celular)
+- [ ] Atribuir o chamado a alguém da equipe: **não existe rota**. A API só mostra e decide documentos para quem está atribuído (`ticket_assignments`, via RLS); sem atribuição o painel avisa e não oferece decisão. Hoje a atribuição é feita direto no banco (como em `apps/api/scripts/e2e.mjs`)
+- [ ] Nome da pessoa logada no topo: `POST /auth/login` devolve só `token`, `expiraEm` e `papel`
 
 **Pronto quando:** o RH aprova/recusa um documento e o status e a linha do tempo atualizam na tela.
 
@@ -74,7 +78,7 @@ Dependência de decisão: issue #17 (quais ERPs aceitam importação por arquivo
 - [ ] `GET /chamados/:id/exportacao?erp=<erp>` gera o arquivo e registra evento no chamado + `erpRef`
 - [ ] Idempotência: exportar duas vezes não duplica registro nem muda `erpRef`
 - [ ] Teste de contrato: arquivo gerado bate com um arquivo de exemplo do layout oficial
-- [ ] Botão de download no detalhe do chamado (etapa 3)
+- [ ] Botão de exportação no detalhe do chamado (o download do arquivo do candidato já existe na etapa 3)
 
 **Pronto quando:** o arquivo gerado para o candidato de teste é aceito pelo importador do ERP (ou, sem acesso ao ERP, validado contra o layout documentado).
 

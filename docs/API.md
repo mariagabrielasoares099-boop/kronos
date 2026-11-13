@@ -38,6 +38,19 @@ Limite próprio: 5 tentativas por minuto por IP. O código TOTP (6 dígitos, 30 
 | GET | `/chamados/:id/eventos` | equipe | `200` linha do tempo / `404` |
 | POST | `/chamados/:id/transicoes` | RECRUTADOR, DP | `200` / `409` |
 
+### Painel da equipe no portal web
+
+O portal web (`apps/web`) usa estas rotas fora do modo demo, sempre com o token da própria pessoa (cookie `kronos_equipe`,
+HttpOnly): `POST /auth/login`, `GET /chamados`, `GET /chamados/:protocolo/resumo`, `GET /chamados/:id/eventos`,
+`GET /chamados/:id/documentos`, `GET /documentos/:id/arquivo`, `PATCH /documentos/:id` e `POST /chamados/:id/transicoes`.
+O portal não decide acesso: repassa o que a API responde (`401` volta ao login, `403` vira aviso, `404`/`409` viram mensagem).
+
+- `GET /chamados` aceita `status`, `busca` (protocolo, nome ou CPF de 11 dígitos) e `limite` (1 a 200, padrão 100); qualquer
+  outro parâmetro responde `400`. Ordena pelo prazo de SLA mais próximo (sem prazo por último). Vaga, candidato e responsável
+  vêm como nome (ou `null` se o RLS esconder); **CPF e e-mail nunca saem nesta resposta**.
+- **Documentos exigem atribuição:** quem enxerga o chamado mas não está atribuído a ele recebe `404` em
+  `GET /chamados/:id/documentos` (regra do RLS). O painel mostra um aviso nesse caso. Ainda não há rota para atribuir.
+
 ### Entrada do candidato no portal
 
 O candidato entra por um **link de uso único enviado ao e-mail cadastrado**. Protocolo + CPF servem só para *pedir* o
