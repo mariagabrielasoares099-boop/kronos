@@ -10,7 +10,7 @@ editor online do Swagger ou a extensão do VS Code); a API não embute interface
 
 ## Autenticação
 
-Todas as rotas (exceto `/health`, `/openapi.json`, `/portal/link` e `/portal/sessao`) exigem `Authorization: Bearer <token>`.
+Todas as rotas (exceto `/health`, `/openapi.json`, `/auth/login`, `/portal/link` e `/portal/sessao`) exigem `Authorization: Bearer <token>`.
 Limite padrão: 60 requisições por minuto por IP e rota (`429` ao exceder).
 Limites adicionais por usuário e tenant ainda estão pendentes no passo 3.
 
