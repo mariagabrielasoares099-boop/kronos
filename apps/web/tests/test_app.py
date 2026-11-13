@@ -89,6 +89,23 @@ def test_lista_de_vagas_em_vagas_e_na_raiz():
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
 
+def test_upload_fora_do_demo_nao_confirma_envio_sem_api():
+    from app.gateway import DemoGateway
+
+    gw = DemoGateway()
+    settings = Settings("http://api", False, "s" * 32, 10, 60)
+    c = TestClient(create_app(settings, gateway=gw), follow_redirects=False)
+    r = c.post("/chamado/ADM-2026-000001/documentos", data={"tipo": "RG"},
+               files={"arquivo": ("rg.png", PNG, "image/png")})
+    assert r.status_code == 503
+    assert gw.listar_documentos("ADM-2026-000001") == []
+
+
+def test_formulario_avisa_que_demo_nao_salva_documentos():
+    c = make()
+    assert "O conteudo nao e salvo nem enviado ao RH" in c.get("/chamado/ADM-2026-000001").text
+
+
 def _chamado(c):
     return c.post("/vagas/v1/candidatar", data=VALID).headers["location"]
 

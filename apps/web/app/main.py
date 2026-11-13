@@ -103,6 +103,8 @@ def create_app(settings: Settings | None = None, gateway: Gateway | None = None)
         tipo: str = Form("", max_length=40),
         arquivo: UploadFile = File(None),
     ):
+        if not cfg.demo_mode and isinstance(gw, DemoGateway):
+            raise HTTPException(503, "Upload indisponivel: integracao com a API ainda nao configurada.")
         c = gw.obter_chamado(protocolo)
         if not c:
             raise HTTPException(404)

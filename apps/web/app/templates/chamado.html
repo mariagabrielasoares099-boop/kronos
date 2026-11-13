@@ -8,6 +8,7 @@
   <p class="alerta">Ha documentos pendentes. Envie-os para continuar.</p>
 {% endif %}
 <h2>Documentos</h2>
+{% if demo %}<p class="alerta">Demonstracao: use apenas arquivos ficticios. O conteudo nao e salvo nem enviado ao RH.</p>{% endif %}
 {% if erro_upload %}<p class="alerta" role="alert">{{ erro_upload }}</p>{% endif %}
 <ul class="checklist">
   {% for item in checklist %}
