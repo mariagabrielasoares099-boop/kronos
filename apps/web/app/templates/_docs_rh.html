@@ -3,7 +3,11 @@
   {% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
   {% if chamado.docs_indisponiveis %}
   <p class="muted" role="status">Voc&ecirc; ainda n&atilde;o est&aacute; atribu&iacute;do a este chamado, por isso os documentos
-    n&atilde;o aparecem. Pe&ccedil;a a atribui&ccedil;&atilde;o a quem opera o chamado.</p>
+    n&atilde;o aparecem.</p>
+  <form method="post" action="/painel/chamado/{{ chamado.protocolo }}/atribuir"
+        hx-post="/painel/chamado/{{ chamado.protocolo }}/atribuir" hx-target="#detalhe" hx-swap="innerHTML">
+    <button type="submit">Assumir este chamado</button>
+  </form>
   {% else %}
   <ul class="checklist">
     {% for item in checklist %}

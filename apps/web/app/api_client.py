@@ -191,6 +191,15 @@ class ApiClient:
             raise ApiIndisponivel()
         return True
 
+    def atribuir(self, chamado_id: str, token: str) -> bool:
+        """A propria pessoa assume o chamado. False se nao existe/nao e visivel; Conflito se nao puder ser atribuida."""
+        r = self._equipe("POST", f"/chamados/{chamado_id}/atribuicao", token, json={})
+        if r.status_code == 404:
+            return False
+        if r.status_code != 200:
+            raise ApiIndisponivel()
+        return True
+
     def baixar_documento(self, doc_id: str, token: str) -> tuple[str, bytes] | None:
         """(mime, conteudo) do arquivo; None quando nao existe ou a pessoa nao pode ve-lo."""
         r = self._equipe("GET", f"/documentos/{doc_id}/arquivo", token)

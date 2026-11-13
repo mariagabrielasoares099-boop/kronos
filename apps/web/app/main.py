@@ -359,7 +359,13 @@ def create_app(
     def chamado_de_api(dados: dict) -> Chamado:
         r = dados["resumo"]
         prazo = datetime.fromisoformat(r["prazoSla"].replace("Z", "+00:00")) if r.get("prazoSla") else None
-        historico = [(e["para"], e["motivo"] or "") for e in dados.get("eventos", []) if e.get("para")]
+        historico = []
+        for e in dados.get("eventos", []):
+            if e.get("para"):
+                historico.append((e["para"], e["motivo"] or ""))
+            elif e.get("tipo") == "ATRIBUICAO":  # auditoria: quem atribuiu a quem
+                autor = f" por {e['autorNome']}" if e.get("autorNome") else ""
+                historico.append(("ATRIBUICAO", f"{e.get('detalhe') or 'Atribuicao'}{autor}"))
         lista = dados.get("documentos")
         docs = [Documento(d["id"], d["tipo"], "", d["status"], d.get("motivo")) for d in lista or []]
         return Chamado(r["protocolo"], "", r.get("candidatoNome") or "-", r["status"], historico,
@@ -479,6 +485,34 @@ def create_app(
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, no-store",
         })
+
+    @app.post("/painel/chamado/{protocolo}/atribuir", response_class=HTMLResponse)
+    def atribuir(request: Request, protocolo: str):
+        """A pessoa logada assume o chamado (sem isso a API nao mostra nem deixa decidir documentos). So com API real."""
+        token = token_equipe(request)
+        if token is None or not PROTOCOLO_RE.match(protocolo):
+            raise HTTPException(404)
+        dados = chamar_equipe(portal_api.equipe_chamado, protocolo, token)
+        if not dados:
+            raise HTTPException(404)
+        erro = None
+        try:
+            if not chamar_equipe(portal_api.atribuir, dados["resumo"]["id"], token):
+                raise HTTPException(404)
+        except Conflito:
+            erro = "Voce nao pode ser atribuido a este chamado."
+        except HTTPException as e:
+            if e.status_code != 403:
+                raise
+            erro = "Seu papel nao permite atribuir chamados."
+        if not request.headers.get("hx-request"):
+            if erro:
+                raise HTTPException(403 if "papel" in erro else 409, erro)
+            return RedirectResponse(f"/painel/chamado/{protocolo}", status_code=303)
+        c = carregar_chamado(token, protocolo)
+        resp = render(request, "_detalhe.html", **contexto_detalhe(token, c, erro))
+        resp.headers["HX-Trigger"] = "atualizarFila"  # o responsavel aparece na fila
+        return resp
 
     @app.post("/painel/chamado/{protocolo}/avancar", response_class=HTMLResponse)
     def avancar(request: Request, protocolo: str):

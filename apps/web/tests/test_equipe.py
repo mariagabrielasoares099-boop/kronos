@@ -34,6 +34,8 @@ class FakeApi:
         self.status_doc = "PENDENTE"
         self.motivo_doc = None
         self.sem_atribuicao = False
+        self.atribuicoes: list[dict] = []
+        self.atribuicao_status = 200  # 403 papel sem permissao, 409 sem vinculo com a empresa
 
     def equipe(self, req: httpx.Request) -> httpx.Response:
         """Rotas da API usadas pelo painel; exige o token da equipe como a API real."""
@@ -46,12 +48,15 @@ class FakeApi:
         if path == f"/chamados/{PROTOCOLO}/resumo":
             return httpx.Response(200, json=RESUMO)
         if path == f"/chamados/{CHAMADO_ID}/eventos":
+            extra = [] if self.sem_atribuicao or not self.atribuicoes else [
+                {"tipo": "ATRIBUICAO", "de": None, "para": None, "motivo": None, "detalhe": "Atribuido a Rita RH",
+                 "autorNome": "Rita RH", "em": "2019-12-03T00:00:00Z"}]
             return httpx.Response(200, json=[
                 {"tipo": "CRIADO", "de": None, "para": "TRIAGEM", "motivo": None, "autorNome": "Rita RH",
                  "em": "2019-12-01T00:00:00Z"},
                 {"tipo": "TRANSICAO", "de": "TRIAGEM", "para": "VALIDACAO_DP", "motivo": "ok", "autorNome": "Rita RH",
                  "em": "2019-12-02T00:00:00Z"},
-            ])
+            ] + extra)
         if path == f"/chamados/{CHAMADO_ID}/documentos" and self.sem_atribuicao:
             return httpx.Response(404)  # a API esconde documentos de quem nao esta atribuido
         if path == f"/chamados/{CHAMADO_ID}/documentos":
@@ -66,6 +71,11 @@ class FakeApi:
                 return httpx.Response(409)
             self.status_doc, self.motivo_doc = corpo["status"], corpo.get("motivo")
             return httpx.Response(200, json={})
+        if path == f"/chamados/{CHAMADO_ID}/atribuicao" and m == "POST":
+            self.atribuicoes.append(json.loads(req.content))
+            if self.atribuicao_status == 200:
+                self.sem_atribuicao = False
+            return httpx.Response(self.atribuicao_status, json={})
         if path == f"/chamados/{CHAMADO_ID}/transicoes" and m == "POST":
             self.transicoes.append(json.loads(req.content))
             return httpx.Response(200, json={})
@@ -281,3 +291,45 @@ def test_detalhe_mostra_o_titulo_da_vaga_da_api_e_favicon_nao_da_404():
     c, _ = logado()
     assert "Analista" in c.get(f"/painel/chamado/{PROTOCOLO}/detalhe").text
     assert c.get("/favicon.ico").status_code == 204
+
+
+def test_assumir_chamado_pela_tela_atribui_na_api_e_libera_os_documentos():
+    c, fake = logado()
+    fake.sem_atribuicao = True
+    antes = c.get(f"/painel/chamado/{PROTOCOLO}/detalhe").text
+    assert "Assumir este chamado" in antes and "Aguardando decisao" not in antes
+    r = c.post(f"/painel/chamado/{PROTOCOLO}/atribuir", headers={"HX-Request": "true"})
+    assert r.status_code == 200 and r.headers["hx-trigger"] == "atualizarFila" and fake.atribuicoes == [{}]
+    assert "Aguardando decisao" in r.text and "Assumir este chamado" not in r.text  # estado novo veio da API
+    assert "Atribuido a Rita RH por Rita RH" in r.text  # auditoria visivel na linha do tempo
+    assert "<html" not in r.text
+
+
+def test_assumir_chamado_sem_javascript_redireciona_e_exige_sessao():
+    c, fake = logado()
+    fake.sem_atribuicao = True
+    r = c.post(f"/painel/chamado/{PROTOCOLO}/atribuir")
+    assert r.status_code == 303 and r.headers["location"] == f"/painel/chamado/{PROTOCOLO}"
+    c.cookies.clear()
+    r = c.post(f"/painel/chamado/{PROTOCOLO}/atribuir")
+    assert r.status_code == 303 and r.headers["location"] == "/login"
+    assert len(fake.atribuicoes) == 1  # a segunda tentativa nem chegou a API
+
+
+def test_atribuicao_negada_pela_api_mostra_aviso_e_nao_libera_documentos():
+    for status, trecho in ((403, "papel nao permite"), (409, "nao pode ser atribuido")):
+        c, fake = logado()
+        fake.sem_atribuicao = True
+        fake.atribuicao_status = status
+        r = c.post(f"/painel/chamado/{PROTOCOLO}/atribuir", headers={"HX-Request": "true"})
+        assert r.status_code == 200 and trecho in r.text and "Aguardando decisao" not in r.text
+        assert c.post(f"/painel/chamado/{PROTOCOLO}/atribuir").status_code == status  # sem HTMX: o mesmo codigo
+
+
+def test_atribuir_valida_o_protocolo_e_nao_existe_no_demo():
+    c, fake = logado()
+    assert c.post("/painel/chamado/ABC/atribuir").status_code == 404
+    assert c.post("/painel/chamado/ADM-2026-999999/atribuir").status_code == 404
+    assert fake.atribuicoes == []
+    demo = TestClient(create_app(Settings("http://api", True, "s" * 32, 10, 60)), follow_redirects=False)
+    assert demo.post("/painel/chamado/ADM-2026-000001/atribuir").status_code == 404

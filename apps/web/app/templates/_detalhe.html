@@ -20,6 +20,6 @@
 <h3>Linha do tempo</h3>
 <ol class="timeline">
   {% for st, motivo in chamado.historico %}
-  <li><strong>{{ labels[st] }}</strong> &mdash; {{ motivo }}</li>
+  <li><strong>{{ labels.get(st, 'Atribuição') }}</strong> &mdash; {{ motivo }}</li>
   {% endfor %}
 </ol>
