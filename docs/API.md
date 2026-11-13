@@ -10,7 +10,7 @@ editor online do Swagger ou a extensão do VS Code); a API não embute interface
 
 ## Autenticação
 
-Todas as rotas (exceto `/health` e `/openapi.json`) exigem `Authorization: Bearer <token>`.
+Todas as rotas (exceto `/health`, `/openapi.json` e `/portal/sessao`) exigem `Authorization: Bearer <token>`.
 Limite padrão: 60 requisições por minuto por IP e rota (`429` ao exceder).
 Limites adicionais por usuário e tenant ainda estão pendentes no passo 3.
 
@@ -21,6 +21,17 @@ Limites adicionais por usuário e tenant ainda estão pendentes no passo 3.
 | POST | `/chamados` | RECRUTADOR, DP | `201` chamado aberto |
 | GET | `/chamados/:protocolo` | qualquer autenticado (o RLS filtra) | `200` / `404` |
 | POST | `/chamados/:id/transicoes` | RECRUTADOR, DP | `200` / `409` |
+
+### Entrada do candidato no portal
+
+`POST /portal/sessao` (pública) recebe `{ "protocolo": "ADM-2026-000001", "cpf": "529.982.247-25" }` e devolve
+`{ "token", "expiraEm" }`. O token vale 2 horas e carrega só tenant e candidato (sem papel de equipe), então abre
+apenas o chamado do próprio candidato e seus documentos (`GET`/`POST /chamados/:id/documentos`,
+`GET /documentos/:id/arquivo`); o RLS faz o resto. Protocolo inexistente, CPF de outra pessoa e CPF inválido
+respondem o mesmo `401`. Limite de 5 tentativas por minuto por IP (`429`).
+
+Limitação: protocolo + CPF é uma credencial fraca (o CPF é dado semipúblico e o protocolo é sequencial). Serve para a
+demo; antes de uso real, trocar por link com código de uso único enviado por e-mail ao candidato.
 
 Chamado sem permissão de leitura responde `404`, igual a chamado inexistente.
 Erros `400` trazem `erros: [{ campo, problema }]`, nunca o valor recebido (pode ser dado pessoal).

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Acessar chamado {{ protocolo }} - KRONOS{% endblock %}
+{% block content %}
+<h1>Acessar chamado {{ protocolo }}</h1>
+<p>Para ver o andamento e enviar documentos, confirme o CPF usado na candidatura.</p>
+{% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
+<form method="post" action="/chamado/{{ protocolo }}/entrar">
+  <label>CPF
+    <input type="text" name="cpf" inputmode="numeric" autocomplete="off" maxlength="14" required>
+  </label>
+  <button type="submit">Acessar</button>
+</form>
+{% endblock %}
