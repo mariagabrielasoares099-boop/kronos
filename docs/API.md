@@ -10,7 +10,7 @@ editor online do Swagger ou a extensão do VS Code); a API não embute interface
 
 ## Autenticação
 
-Todas as rotas (exceto `/health`, `/openapi.json` e `/portal/sessao`) exigem `Authorization: Bearer <token>`.
+Todas as rotas (exceto `/health`, `/openapi.json`, `/portal/link` e `/portal/sessao`) exigem `Authorization: Bearer <token>`.
 Limite padrão: 60 requisições por minuto por IP e rota (`429` ao exceder).
 Limites adicionais por usuário e tenant ainda estão pendentes no passo 3.
 
@@ -49,7 +49,10 @@ e-mail e antivírus que pré-abrem links não consomem o acesso.
 E-mail: `SMTP_URL` (obrigatória em produção; em desenvolvimento use o Mailpit do `docker-compose`, que mostra as mensagens em
 `http://localhost:8025`), `EMAIL_FROM` e `PORTAL_BASE_URL`. Sem `SMTP_URL` fora de produção, a mensagem vai para o log
 da API (contém o link: nunca usar assim em produção, o `parseEnv` impede). Limitação: o código aparece no caminho da URL
-e pode ficar em log de acesso do servidor do portal; como é de uso único e curto, o log de um link já usado não serve para nada.
+e pode ficar em log de acesso do servidor do portal. Antes do primeiro uso ou da expiração, quem obtiver esse código
+pode trocá-lo por uma sessão. Uso único reduz a janela de exposição, mas não torna o log seguro. Não registrar o caminho
+completo de `/chamado/*/acesso/*` no servidor, proxy ou APM; configurar redação ou desabilitar o access log dessas rotas
+antes de publicar. As páginas do chamado usam `Cache-Control: no-store` e `Referrer-Policy: no-referrer`.
 
 Chamado sem permissão de leitura responde `404`, igual a chamado inexistente.
 Erros `400` trazem `erros: [{ campo, problema }]`, nunca o valor recebido (pode ser dado pessoal).

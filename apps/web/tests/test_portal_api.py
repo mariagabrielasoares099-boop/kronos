@@ -109,6 +109,7 @@ def test_abrir_o_link_so_mostra_a_confirmacao_e_nao_gasta_o_codigo():
     r = c.get(ACESSO)
     assert r.status_code == 200 and "Entrar no chamado" in r.text
     assert r.headers["cache-control"] == "no-store"
+    assert r.headers["referrer-policy"] == "no-referrer"
     assert f'action="{ACESSO}"' in r.text
     assert fake.chamadas == []  # leitor de e-mail que pre-abre o link nao consome o codigo
 
