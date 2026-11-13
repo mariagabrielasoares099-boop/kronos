@@ -18,3 +18,5 @@
 | [14 API pública e webhooks](14-api-publica.md) | Fase 3 | API pública versionada, chaves de API por tenant, webhooks para clientes e importação de aprovados da Gupy. |
 | [15 IA: OCR de documentos e triagem](15-ia-ocr.md) | Fase 3 | Leitura de documentos com conferência de CPF/nome/validade e triagem de currículos. Aplicável apenas se IA for usada. |
 | [16 Plataforma transversal (10 passos)](16-plataforma.md) | Fase 1 em diante | Segredos, sanitização, rate limit, resiliência, LGPD, testes, observabilidade, CI/CD |
+
+Decisões de arquitetura ligadas aos módulos: [ADR-003 — Escopo de IA generativa na demo](ADR-003-escopo-ia-demo.md).
