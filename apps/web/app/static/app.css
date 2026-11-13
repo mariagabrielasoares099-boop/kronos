@@ -114,3 +114,7 @@ button:hover { background:var(--brand-dark); }
 }
 .sair { margin:0 0 0 8px; }
 .sair button { background:none; border:1px solid var(--line); color:var(--muted); padding:3px 10px; border-radius:6px; font-size:13px; cursor:pointer; }
+.mestre-detalhe > * { min-width:0; }
+.mestre { overflow-x:auto; }
+.mestre .fila { min-width:520px; }
+@media (max-width: 900px) { .mestre .fila { min-width:0; } }
