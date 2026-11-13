@@ -1,11 +1,12 @@
 <!doctype html>
 {% set path = request.url.path %}
-{% set rh = demo and path.startswith('/painel') %}
+{% set rh = path.startswith('/painel') %}
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}KRONOS{% endblock %}</title>
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>
@@ -18,7 +19,7 @@
       <nav>
         <a href="/painel/fila" class="{{ 'on' if path.startswith('/painel/fila') or path.startswith('/painel/chamado') }}">Fila de chamados</a>
         <a href="/painel" class="{{ 'on' if path == '/painel' }}">Quadro de etapas</a>
-        <a href="/vagas">Portal de vagas</a>
+        {% if demo %}<a href="/vagas">Portal de vagas</a>{% endif %}
       </nav>
     </aside>
     {% endif %}
@@ -26,7 +27,12 @@
       <header class="bar">
         {% if rh %}
         <span class="crumb">Painel do RH</span>
+        {% if demo %}
         <span class="user"><span class="avatar" aria-hidden="true">DR</span>Diego (RH)</span>
+        {% else %}
+        <span class="user"><span class="avatar" aria-hidden="true">RH</span>Equipe
+          <form method="post" action="/sair" class="sair"><button type="submit">Sair</button></form></span>
+        {% endif %}
         {% else %}
         <a href="/" class="brand">KRONOS</a><span class="crumb">Portal de vagas</span>
         {% if demo %}<a class="bar-link" href="/painel/fila">Area do RH</a>{% endif %}
