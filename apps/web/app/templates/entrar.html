@@ -2,12 +2,18 @@
 {% block title %}Acessar chamado {{ protocolo }} - KRONOS{% endblock %}
 {% block content %}
 <h1>Acessar chamado {{ protocolo }}</h1>
-<p>Para ver o andamento e enviar documentos, confirme o CPF usado na candidatura.</p>
+{% if enviado %}
+<p role="status">Se os dados conferem, enviamos um link de acesso para o e-mail cadastrado na candidatura.
+  Ele vale por 15 minutos e s&oacute; pode ser usado uma vez. Confira tamb&eacute;m a caixa de spam.</p>
+{% else %}
+<p>Para ver o andamento e enviar documentos, confirme o CPF usado na candidatura. Enviaremos um link de acesso
+  para o e-mail cadastrado.</p>
 {% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
-<form method="post" action="/chamado/{{ protocolo }}/entrar">
+<form method="post" action="/chamado/{{ protocolo }}/link">
   <label>CPF
     <input type="text" name="cpf" inputmode="numeric" autocomplete="off" maxlength="14" required>
   </label>
-  <button type="submit">Acessar</button>
+  <button type="submit">Enviar link por e-mail</button>
 </form>
+{% endif %}
 {% endblock %}

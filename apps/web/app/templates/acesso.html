@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Confirmar acesso - KRONOS{% endblock %}
+{% block content %}
+<h1>Acessar chamado {{ protocolo }}</h1>
+{# O link do e-mail so abre esta pagina; o codigo so e gasto ao confirmar (leitores de e-mail que pre-abrem links nao o consomem). #}
+<p>Confirme para entrar no seu chamado. Este link s&oacute; pode ser usado uma vez.</p>
+<form method="post" action="/chamado/{{ protocolo }}/acesso/{{ codigo }}">
+  <button type="submit">Entrar no chamado</button>
+</form>
+{% endblock %}

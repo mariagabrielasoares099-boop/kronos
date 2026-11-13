@@ -18,6 +18,7 @@ from .validators import is_valid_cpf, is_valid_email, only_digits
 BASE = Path(__file__).parent
 COOKIE_SESSAO = "kronos_portal"
 PROTOCOLO_RE = re.compile(r"^ADM-\d{4}-\d{6}$")
+CODIGO_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")  # 32 bytes em base64url (formato do codigo emitido pela API)
 
 
 def create_app(
@@ -110,8 +111,8 @@ def create_app(
         return [{"tipo": t, "rotulo": r, "doc": por_tipo.get(t)} for t, r in CHECKLIST.items()]
 
     def pagina_entrar(request: Request, protocolo: str, erro: str | None = None, status_code: int = 200,
-                      limpar: bool = False):
-        resp = render(request, "entrar.html", status_code=status_code, protocolo=protocolo, erro=erro)
+                      limpar: bool = False, enviado: bool = False):
+        resp = render(request, "entrar.html", status_code=status_code, protocolo=protocolo, erro=erro, enviado=enviado)
         if limpar:
             resp.delete_cookie(COOKIE_SESSAO, path="/chamado")
         return resp
@@ -126,7 +127,7 @@ def create_app(
             raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
         if ch is None or docs is None:
             # Token expirado ou chamado de outra pessoa: mesma resposta, sem distinguir.
-            return pagina_entrar(request, protocolo, "Sua sessao expirou. Informe o CPF novamente.", 401, limpar=True)
+            return pagina_entrar(request, protocolo, "Sua sessao expirou. Peca um novo link de acesso.", 401, limpar=True)
         c = Chamado(ch["protocolo"], ch["jobId"], "", ch["status"])
         return render_chamado(request, c, itens_api(docs), None, status_code, erro)
 
@@ -144,23 +145,48 @@ def create_app(
             return pagina_entrar(request, protocolo)
         return pagina_chamado_api(request, protocolo, token)
 
-    @app.post("/chamado/{protocolo}/entrar")
-    def entrar(request: Request, protocolo: str, cpf: str = Form("", max_length=20)):
+    @app.post("/chamado/{protocolo}/link", response_class=HTMLResponse)
+    def pedir_link(request: Request, protocolo: str, cpf: str = Form("", max_length=20)):
+        """Protocolo + CPF so servem para PEDIR o link por e-mail; a resposta e a mesma acertando ou errando."""
         if portal_api is None or not PROTOCOLO_RE.match(protocolo):
             raise HTTPException(404)
         ip = request.client.host if request.client else "?"
-        if not limiter.allow(f"entrar:{ip}"):
+        if not limiter.allow(f"link:{ip}"):
             raise HTTPException(429, "Muitas tentativas. Aguarde um minuto.")
         if not is_valid_cpf(cpf):
             return pagina_entrar(request, protocolo, "CPF invalido.", 422)
         try:
-            sessao = portal_api.entrar(protocolo, only_digits(cpf))
+            portal_api.solicitar_link(protocolo, only_digits(cpf))
+        except ArquivoInvalido as e:  # a API limitou os pedidos (429)
+            return pagina_entrar(request, protocolo, str(e), e.status_code)
+        except ApiIndisponivel:
+            raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+        return pagina_entrar(request, protocolo, enviado=True)
+
+    @app.get("/chamado/{protocolo}/acesso/{codigo}", response_class=HTMLResponse)
+    def acesso(request: Request, protocolo: str, codigo: str):
+        """Abre so a pagina de confirmacao: o codigo nao e gasto aqui (leitores de e-mail pre-abrem links)."""
+        if portal_api is None or not PROTOCOLO_RE.match(protocolo) or not CODIGO_RE.match(codigo):
+            raise HTTPException(404)
+        resp = render(request, "acesso.html", protocolo=protocolo, codigo=codigo)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.post("/chamado/{protocolo}/acesso/{codigo}")
+    def entrar(request: Request, protocolo: str, codigo: str):
+        if portal_api is None or not PROTOCOLO_RE.match(protocolo) or not CODIGO_RE.match(codigo):
+            raise HTTPException(404)
+        ip = request.client.host if request.client else "?"
+        if not limiter.allow(f"entrar:{ip}"):
+            raise HTTPException(429, "Muitas tentativas. Aguarde um minuto.")
+        try:
+            sessao = portal_api.entrar(codigo)
         except ArquivoInvalido as e:  # a API limitou as tentativas (429)
             return pagina_entrar(request, protocolo, str(e), e.status_code)
         except ApiIndisponivel:
             raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
         if sessao is None:
-            return pagina_entrar(request, protocolo, "Protocolo ou CPF incorreto.", 401)
+            return pagina_entrar(request, protocolo, "Link invalido, vencido ou ja usado. Peca um novo link.", 401)
         resp = RedirectResponse(f"/chamado/{protocolo}", status_code=303)
         resp.set_cookie(
             COOKIE_SESSAO, sessao.token, max_age=max(sessao.expira_em - int(time.time()), 0),
@@ -217,7 +243,7 @@ def create_app(
             except ApiIndisponivel:
                 raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
             if not gravado:
-                return pagina_entrar(request, protocolo, "Sua sessao expirou. Informe o CPF novamente.", 401, limpar=True)
+                return pagina_entrar(request, protocolo, "Sua sessao expirou. Peca um novo link de acesso.", 401, limpar=True)
         return RedirectResponse(f"/chamado/{protocolo}", status_code=303)
 
     @app.get("/painel", response_class=HTMLResponse)

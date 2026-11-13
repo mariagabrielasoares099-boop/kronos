@@ -34,9 +34,18 @@ class ApiClient:
         except httpx.HTTPError as e:
             raise ApiIndisponivel() from e  # a mensagem do httpx pode conter a URL; nao propaga
 
-    def entrar(self, protocolo: str, cpf: str) -> Sessao | None:
-        """Protocolo + CPF -> token. None quando a API recusa (401); a causa nao e distinguida de proposito."""
-        r = self._chamar("POST", "/portal/sessao", json={"protocolo": protocolo, "cpf": cpf})
+    def solicitar_link(self, protocolo: str, cpf: str) -> None:
+        """Pede o link de acesso por e-mail. Protocolo + CPF so servem para PEDIR: a API responde 202 igual em
+        qualquer caso, entao aqui tambem nao ha como saber se o e-mail foi enviado."""
+        r = self._chamar("POST", "/portal/link", json={"protocolo": protocolo, "cpf": cpf})
+        if r.status_code == 429:
+            raise ArquivoInvalido("Muitas tentativas. Aguarde um minuto.", 429)
+        if r.status_code != 202:
+            raise ApiIndisponivel()
+
+    def entrar(self, codigo: str) -> Sessao | None:
+        """Codigo do link (uso unico) -> token. None quando a API recusa (401): invalido, vencido ou ja usado."""
+        r = self._chamar("POST", "/portal/sessao", json={"codigo": codigo})
         if r.status_code in (400, 401):
             return None
         if r.status_code == 429:

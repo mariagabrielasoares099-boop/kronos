@@ -24,17 +24,32 @@ Limites adicionais por usuário e tenant ainda estão pendentes no passo 3.
 
 ### Entrada do candidato no portal
 
-`POST /portal/sessao` (pública) recebe `{ "protocolo": "ADM-2026-000001", "cpf": "529.982.247-25" }` e devolve
-`{ "token", "expiraEm" }`. O token vale 2 horas e carrega só tenant e candidato (sem papel de equipe), então abre
-apenas o chamado do próprio candidato e seus documentos (`GET`/`POST /chamados/:id/documentos`,
-`GET /documentos/:id/arquivo`); o RLS faz o resto. Protocolo inexistente, CPF de outra pessoa e CPF inválido
-respondem o mesmo `401`. Limite de 5 tentativas por minuto por IP (`429`).
+O candidato entra por um **link de uso único enviado ao e-mail cadastrado**. Protocolo + CPF servem só para *pedir* o
+link (o CPF é dado semipúblico e o protocolo é sequencial, então não provam quem é a pessoa); quem prova é quem lê
+o e-mail.
 
-Se CPF e protocolo coincidirem em mais de um tenant, a entrada tambem e recusada; nunca se escolhe um tenant
-arbitrariamente. O fluxo futuro com codigo/link precisa identificar o contexto correto da candidatura.
+1. `POST /portal/link` (pública) recebe `{ "protocolo": "ADM-2026-000001", "cpf": "529.982.247-25" }` e responde `202`
+   com a mesma mensagem em qualquer caso: protocolo inexistente, CPF errado, CPF inválido ou erro no envio. Quem pede
+   não descobre se o protocolo existe. Se os dados conferem, o e-mail vai para o endereço cadastrado com um link
+   `PORTAL_BASE_URL/chamado/<protocolo>/acesso/<codigo>`. Limite de 5 pedidos por minuto por IP (`429`) e de 1 e-mail por
+   minuto por candidato (o pedido extra responde `202` e não envia nada).
+2. `POST /portal/sessao` (pública) recebe `{ "codigo": "<do e-mail>" }` e devolve `{ "token", "expiraEm" }`. O código tem
+   256 bits aleatórios, vale 15 minutos e **funciona uma única vez**; um novo pedido invalida o anterior. O banco guarda
+   só o SHA-256 dele. Código inválido, vencido ou já usado responde o mesmo `401`.
 
-Limitação: protocolo + CPF é uma credencial fraca (o CPF é dado semipúblico e o protocolo é sequencial). Serve para a
-demo; antes de uso real, trocar por link com código de uso único enviado por e-mail ao candidato.
+O token vale 2 horas e carrega só tenant e candidato (sem papel de equipe), então abre apenas o chamado do próprio
+candidato e seus documentos (`GET`/`POST /chamados/:id/documentos`, `GET /documentos/:id/arquivo`); o RLS faz o resto.
+
+Se CPF e protocolo coincidirem em mais de um tenant, nenhum link é enviado: nunca se escolhe um tenant
+arbitrariamente.
+
+No portal, a página do link só mostra um botão de confirmação; o código é gasto no `POST` do botão. Assim, leitores de
+e-mail e antivírus que pré-abrem links não consomem o acesso.
+
+E-mail: `SMTP_URL` (obrigatória em produção; em desenvolvimento use o Mailpit do `docker-compose`, que mostra as mensagens em
+`http://localhost:8025`), `EMAIL_FROM` e `PORTAL_BASE_URL`. Sem `SMTP_URL` fora de produção, a mensagem vai para o log
+da API (contém o link: nunca usar assim em produção, o `parseEnv` impede). Limitação: o código aparece no caminho da URL
+e pode ficar em log de acesso do servidor do portal; como é de uso único e curto, o log de um link já usado não serve para nada.
 
 Chamado sem permissão de leitura responde `404`, igual a chamado inexistente.
 Erros `400` trazem `erros: [{ campo, problema }]`, nunca o valor recebido (pode ser dado pessoal).
