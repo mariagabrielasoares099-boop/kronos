@@ -95,6 +95,40 @@ describe.skipIf(!ADMIN || !APP)('Portal do candidato: entrada + upload ponta a p
   let codigoEmail = '';
   let corpoPedidoCerto: unknown;
 
+  it('dois pedidos concorrentes geram apenas um link para o candidato', async () => {
+    const nome = `link-concorrencia-${cand2}`;
+    const clientes = [0, 1].map(() => new Client({ connectionString: APP!, application_name: nome }));
+    await Promise.all(clientes.map((c) => c.connect()));
+    let pedidos: Promise<{ rows: unknown[] }[]> | undefined;
+    try {
+      await admin.query('BEGIN');
+      await admin.query('SELECT id FROM candidates WHERE id = $1 FOR UPDATE', [cand2]);
+      pedidos = Promise.all(clientes.map((c, i) => c.query(
+        'SELECT * FROM auth_candidato_solicitar_link($1, $2, $3, $4)',
+        ['ADM-2026-700002', CPF2, sha256(`concorrente-${i}`), new Date(Date.now() + 600_000)],
+      )));
+      // Aguarda os dois pedidos chegarem ao lock; nao depende da ordem de execucao das conexoes.
+      let bloqueados = 0;
+      for (let tentativa = 0; tentativa < 100 && bloqueados < 2; tentativa++) {
+        await admin.query('SELECT pg_stat_clear_snapshot()');
+        const r = await admin.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = 'Lock'", [nome]);
+        bloqueados = r.rows[0].n;
+        if (bloqueados < 2) await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(bloqueados).toBe(2);
+      await admin.query('COMMIT');
+      const resultados = await pedidos;
+      expect(resultados.reduce((n, r) => n + r.rows.length, 0)).toBe(1);
+      const links = await admin.query('SELECT id FROM portal_links WHERE candidate_id = $1 AND usado_em IS NULL', [cand2]);
+      expect(links.rows).toHaveLength(1);
+    } finally {
+      await admin.query('ROLLBACK');
+      if (pedidos) await Promise.allSettled([pedidos]);
+      await Promise.all(clientes.map((c) => c.end()));
+      await admin.query('DELETE FROM portal_links WHERE candidate_id = $1', [cand2]);
+    }
+  }, 10_000);
+
   it('nao escolhe tenant arbitrariamente quando CPF e protocolo coincidem', async () => {
     await admin.query('UPDATE candidates SET cpf = $1 WHERE id = $2', [CPF, candT2]);
     try {
