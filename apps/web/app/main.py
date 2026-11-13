@@ -2,7 +2,7 @@ import re
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,7 +11,11 @@ from fastapi.templating import Jinja2Templates
 from .api_client import ApiClient, ApiIndisponivel
 from .arquivos import TAMANHO_MAXIMO_BYTES, ArquivoInvalido, validar_arquivo
 from .config import Settings, load_settings
-from .gateway import CHECKLIST, STATUS_LABELS, STATUSES, Chamado, DemoGateway, Documento, Gateway
+from .fila import filtrar, sla_situacao
+from .gateway import (
+    ACAO_AVANCAR, CHECKLIST, STATUS_LABELS, STATUSES, TIPOS_DOCUMENTO, Chamado, DemoGateway,
+    Documento, Gateway,
+)
 from .security import RateLimiter, SecurityHeadersMiddleware
 from .validators import is_valid_cpf, is_valid_email, only_digits
 
@@ -19,6 +23,7 @@ BASE = Path(__file__).parent
 COOKIE_SESSAO = "kronos_portal"
 PROTOCOLO_RE = re.compile(r"^ADM-\d{4}-\d{6}$")
 CODIGO_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")  # 32 bytes em base64url (formato do codigo emitido pela API)
+SLA_LABELS = {"atrasado": "Atrasado", "vencendo": "Vence em 24h", "no_prazo": "No prazo", "sem_sla": "-"}
 
 
 def create_app(
@@ -36,7 +41,7 @@ def create_app(
     app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
     def render(request: Request, name: str, status_code: int = 200, **ctx) -> HTMLResponse:
-        ctx.update(demo=cfg.demo_mode, labels=STATUS_LABELS)
+        ctx.update(demo=cfg.demo_mode, labels=STATUS_LABELS, tipos=TIPOS_DOCUMENTO)
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
     @app.get("/health")
@@ -95,20 +100,26 @@ def create_app(
 
     def render_chamado(request: Request, c, itens, vaga, status_code: int = 200, erro: str | None = None):
         return render(request, "chamado.html", status_code=status_code, chamado=c, vaga=vaga,
-                      checklist=itens, erro_upload=erro)
+                      checklist=itens, erro=erro)
 
-    def itens_demo(protocolo: str):
-        docs = gw.listar_documentos(protocolo)
-        return [
-            {"tipo": tipo, "rotulo": rotulo, "doc": next((d for d in reversed(docs) if d.tipo == tipo), None)}
-            for tipo, rotulo in CHECKLIST.items()
-        ]
+    def itens_de(docs: list[Documento]) -> list[dict]:
+        """Cada item do checklist mostra o status do ultimo envio daquele tipo (em ordem de envio)."""
+        itens = []
+        for tipo in CHECKLIST:
+            ultimo = next((d for d in reversed(docs) if d.tipo == tipo), None)
+            itens.append({"tipo": tipo, "doc": ultimo, "status": ultimo.status if ultimo else "FALTANDO"})
+        return itens
 
-    def itens_api(docs: dict):
-        por_tipo: dict[str, Documento] = {}
-        for d in docs.get("documentos", []):  # em ordem de envio: o ultimo de cada tipo vale
-            por_tipo[d["tipo"]] = Documento(d["tipo"], d["mime"], d["tamanhoBytes"], d["status"], d.get("motivo"))
-        return [{"tipo": t, "rotulo": r, "doc": por_tipo.get(t)} for t, r in CHECKLIST.items()]
+    def checklist_de(c) -> list[dict]:
+        return itens_de(c.documentos)
+
+    def itens_demo(c) -> list[dict]:
+        return checklist_de(c)
+
+    def itens_api(docs: dict) -> list[dict]:
+        return itens_de([
+            Documento(d["id"], d["tipo"], "", d["status"], d.get("motivo")) for d in docs.get("documentos", [])
+        ])
 
     def pagina_entrar(request: Request, protocolo: str, erro: str | None = None, status_code: int = 200,
                       limpar: bool = False, enviado: bool = False):
@@ -137,7 +148,7 @@ def create_app(
             c = gw.obter_chamado(protocolo)
             if not c:
                 raise HTTPException(404)
-            return render_chamado(request, c, itens_demo(c.protocolo), gw.obter_vaga(c.vaga_id))
+            return render_chamado(request, c, itens_demo(c), gw.obter_vaga(c.vaga_id))
         if not PROTOCOLO_RE.match(protocolo):
             raise HTTPException(404)
         token = request.cookies.get(COOKIE_SESSAO)
@@ -217,7 +228,7 @@ def create_app(
 
         async def mostrar(status_code: int, erro: str):
             if portal_api is None:
-                return render_chamado(request, c, itens_demo(protocolo), gw.obter_vaga(c.vaga_id), status_code, erro)
+                return render_chamado(request, c, itens_demo(c), gw.obter_vaga(c.vaga_id), status_code, erro)
             return await run_in_threadpool(pagina_chamado_api, request, protocolo, token, status_code, erro)
 
         try:
@@ -231,7 +242,7 @@ def create_app(
             return await mostrar(e.status_code, str(e))
 
         if portal_api is None:
-            gw.enviar_documento(protocolo, tipo, mime, len(conteudo))
+            gw.enviar_documento(protocolo, tipo, "arquivo-enviado")  # o demo nunca guarda nem repete o nome enviado
         else:
             try:
                 ch = await run_in_threadpool(portal_api.obter_chamado, protocolo, token)
@@ -255,6 +266,63 @@ def create_app(
         for c in gw.listar_chamados():
             colunas[c.status].append(c)
         return render(request, "painel.html", colunas=colunas)
+
+    def montar_fila(status: str, busca: str) -> dict:
+        if status and status not in STATUS_LABELS:
+            raise HTTPException(422, "Status invalido")
+        itens = filtrar(gw.listar_chamados(), status, busca)
+        return {"linhas": [(c, sla_situacao(c)) for c in itens], "sla_labels": SLA_LABELS,
+                "status": status, "busca": busca}
+
+    @app.get("/painel/fila", response_class=HTMLResponse)
+    def fila(request: Request, status: str = Query("", max_length=30), busca: str = Query("", max_length=60)):
+        if not cfg.demo_mode:  # mesma regra do /painel ate existir login + 2FA
+            raise HTTPException(404)
+        return render(request, "fila.html", **montar_fila(status, busca))
+
+    @app.get("/painel/fila/tabela", response_class=HTMLResponse)
+    def fila_tabela(request: Request, status: str = Query("", max_length=30), busca: str = Query("", max_length=60)):
+        if not cfg.demo_mode:
+            raise HTTPException(404)
+        return render(request, "_fila_tabela.html", **montar_fila(status, busca))
+
+    def so_demo() -> None:  # mesma regra do /painel ate existir login + 2FA
+        if not cfg.demo_mode:
+            raise HTTPException(404)
+
+    def render_docs(request: Request, c, erro: str | None = None):
+        return render(request, "_docs_rh.html", chamado=c, checklist=checklist_de(c), erro=erro)
+
+    @app.get("/painel/chamado/{protocolo}", response_class=HTMLResponse)
+    def painel_chamado(request: Request, protocolo: str):
+        so_demo()
+        c = gw.obter_chamado(protocolo)
+        if not c:
+            raise HTTPException(404)
+        return render(request, "painel_chamado.html", chamado=c, vaga=gw.obter_vaga(c.vaga_id), checklist=checklist_de(c),
+                      erro=None, acao=ACAO_AVANCAR.get(c.status), sla=sla_situacao(c), sla_labels=SLA_LABELS)
+
+    @app.post("/painel/documentos/{doc_id}/decisao", response_class=HTMLResponse)
+    def decidir_documento(request: Request, doc_id: str, acao: str = Form("", max_length=10), motivo: str = Form("", max_length=500)):
+        so_demo()
+        achado = gw.obter_documento(doc_id)
+        if not achado:
+            raise HTTPException(404)
+        c, d = achado
+        if acao not in ("aprovar", "recusar"):
+            raise HTTPException(422, "Acao invalida")
+        if acao == "recusar" and len(motivo.strip()) < 3:
+            return render_docs(request, c, "Informe o motivo da recusa (minimo 3 caracteres).")
+        if gw.decidir_documento(doc_id, acao == "aprovar", motivo) is None:
+            return render_docs(request, c, "Este documento ja foi decidido.")
+        return render_docs(request, c)
+
+    @app.post("/painel/chamado/{protocolo}/avancar")
+    def avancar(protocolo: str):
+        so_demo()
+        if gw.avancar(protocolo) is None:
+            raise HTTPException(409, "Este chamado nao pode avancar")
+        return RedirectResponse(f"/painel/chamado/{protocolo}", status_code=303)
 
     return app
 

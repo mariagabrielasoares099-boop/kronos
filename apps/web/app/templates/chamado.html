@@ -7,31 +7,31 @@
 {% if chamado.status == 'AGUARDANDO_CANDIDATO' %}
   <p class="alerta">Ha documentos pendentes. Envie-os para continuar.</p>
 {% endif %}
-<h2>Documentos</h2>
+
+<h2>Seus documentos</h2>
 {% if demo %}<p class="alerta">Demonstracao: use apenas arquivos ficticios. O conteudo nao e salvo nem enviado ao RH.</p>{% endif %}
-{% if erro_upload %}<p class="alerta" role="alert">{{ erro_upload }}</p>{% endif %}
+{% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
 <ul class="checklist">
   {% for item in checklist %}
-  <li>
-    <strong>{{ item.rotulo }}</strong> &mdash;
-    {% if not item.doc %}faltando
-    {% elif item.doc.status == 'APROVADO' %}aprovado
-    {% elif item.doc.status == 'RECUSADO' %}recusado{% if item.doc.motivo %}: {{ item.doc.motivo }}{% endif %}
-    {% else %}em analise{% endif %}
+  <li class="item item-{{ item.status|lower }}">
+    <div class="item-topo"><strong>{{ tipos[item.tipo] }}</strong>
+      <span class="badge badge-{{ item.status|lower }}">{{ {'FALTANDO': 'Faltando', 'PENDENTE': 'Em analise', 'APROVADO': 'Aprovado', 'RECUSADO': 'Recusado'}[item.status] }}</span></div>
+    {% if item.doc and item.doc.status == 'RECUSADO' %}<p class="muted">Recusado: {{ item.doc.motivo }}. Envie novamente.</p>{% endif %}
   </li>
   {% endfor %}
 </ul>
-<form method="post" action="/chamado/{{ chamado.protocolo }}/documentos" enctype="multipart/form-data">
-  <label>Documento
+<form class="form" method="post" action="/chamado/{{ chamado.protocolo }}/documentos" enctype="multipart/form-data">
+  <label>Tipo
     <select name="tipo" required>
-      {% for item in checklist %}<option value="{{ item.tipo }}">{{ item.rotulo }}</option>{% endfor %}
+      {% for k, nome in tipos.items() %}<option value="{{ k }}">{{ nome }}</option>{% endfor %}
     </select>
   </label>
   <label>Arquivo (JPG, PNG ou PDF, ate 5 MB)
     <input type="file" name="arquivo" accept="image/jpeg,image/png,application/pdf" capture="environment" required>
   </label>
-  <button type="submit">Enviar documento</button>
+  <button>Enviar documento</button>
 </form>
+
 <h2>Historico</h2>
 <ol class="timeline">
   {% for st, motivo in chamado.historico %}

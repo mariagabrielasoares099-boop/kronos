@@ -13,6 +13,7 @@ O recrutamento acontece num lugar (Gupy, planilha, e-mail) e a admissão em outr
 3. **Admissão**: aprovado o candidato, os dados validados seguem para o ERP do cliente.
 
 Leitura rápida para a equipe: [`docs/RESUMO.md`](docs/RESUMO.md).
+Quer ver funcionando? Roteiro de demonstração em [`docs/DEMO.md`](docs/DEMO.md).
 
 ## Stack
 | Camada | Tecnologia |

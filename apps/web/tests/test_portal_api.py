@@ -47,7 +47,7 @@ class FakeApi:
         if path == f"/chamados/{CHAMADO_ID}/documentos" and req.method == "GET":
             return httpx.Response(200, json={"documentos": self.documentos, "checklist": []})
         if path == f"/chamados/{CHAMADO_ID}/documentos" and req.method == "POST":
-            self.documentos.append({"tipo": "RG", "status": "PENDENTE", "motivo": None,
+            self.documentos.append({"id": "d1", "tipo": "RG", "status": "PENDENTE", "motivo": None,
                                     "mime": "image/png", "tamanhoBytes": 40})
             return httpx.Response(201, json={})
         return httpx.Response(404)
@@ -122,7 +122,7 @@ def test_confirmar_o_link_grava_cookie_httponly_e_mostra_o_chamado_da_api():
     assert "httponly" in cookie and "samesite=lax" in cookie and "path=/chamado" in cookie
     assert json.loads(fake.chamou("/portal/sessao")[0].content) == {"codigo": CODIGO}
     page = c.get(f"/chamado/{PROTOCOLO}")
-    assert page.status_code == 200 and "Triagem" in page.text and "faltando" in page.text
+    assert page.status_code == 200 and "Triagem" in page.text and "Faltando" in page.text
     assert all(x.headers["authorization"] == f"Bearer {TOKEN}" for x in fake.chamadas[1:])
 
 
@@ -148,7 +148,7 @@ def test_upload_envia_o_arquivo_a_api_com_token_e_aparece_na_listagem():
     assert envio.headers["authorization"] == f"Bearer {TOKEN}"
     assert b'name="tipo"' in envio.content and PNG in envio.content
     assert b"meu rg.png" not in envio.content  # o nome vindo do usuario nao e repassado
-    assert "em analise" in c.get(f"/chamado/{PROTOCOLO}").text
+    assert "Em analise" in c.get(f"/chamado/{PROTOCOLO}").text
 
 
 def test_upload_sem_sessao_ou_com_arquivo_invalido_nao_chega_a_api():

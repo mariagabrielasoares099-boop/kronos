@@ -1,0 +1,21 @@
+{% if linhas %}
+<table class="fila">
+  <thead>
+    <tr><th>Protocolo</th><th>Candidato</th><th>Status</th><th>Responsavel</th><th>SLA</th></tr>
+  </thead>
+  <tbody>
+    {% for c, sla in linhas %}
+    <tr>
+      <td><a href="/painel/chamado/{{ c.protocolo }}">{{ c.protocolo }}</a></td>
+      <td>{{ c.nome }}</td>
+      <td>{{ labels[c.status] }}</td>
+      <td>{{ c.responsavel or '-' }}</td>
+      <td><span class="sla sla-{{ sla }}">{{ sla_labels[sla] }}</span>{% if c.prazo_sla and sla != 'sem_sla' %} <small>{{ c.prazo_sla.strftime('%d/%m %H:%M') }}</small>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted">{{ linhas|length }} chamado(s)</p>
+{% else %}
+<p class="muted">Nenhum chamado encontrado.</p>
+{% endif %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Fila do RH - KRONOS{% endblock %}
+{% block content %}
+<h1>Fila de chamados</h1>
+<p><a href="/painel">Ver em quadro (kanban)</a></p>
+<form class="filtros" hx-get="/painel/fila/tabela" hx-target="#tabela" hx-trigger="input changed delay:300ms, change">
+  <label>Buscar
+    <input id="busca" name="busca" type="search" maxlength="60" placeholder="Protocolo ou nome" value="{{ busca }}">
+  </label>
+  <label>Status
+    <select id="status" name="status">
+      <option value="">Todos</option>
+      {% for st, nome in labels.items() %}
+      <option value="{{ st }}" {{ 'selected' if st == status }}>{{ nome }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+<div id="tabela">{% include "_fila_tabela.html" %}</div>
+{% endblock %}

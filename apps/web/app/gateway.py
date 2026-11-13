@@ -4,6 +4,7 @@ A regra de negocio (transicoes de status, SLA, RLS) mora na API. O DemoGateway s
 simula o suficiente para a tela funcionar e NAO e a fonte de verdade.
 """
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 STATUS_LABELS = {
@@ -20,6 +21,27 @@ STATUS_LABELS = {
 }
 STATUSES = list(STATUS_LABELS)
 
+TIPOS_DOCUMENTO = {
+    "RG": "RG",
+    "CPF": "CPF",
+    "COMPROVANTE_RESIDENCIA": "Comprovante de residencia",
+    "CTPS": "CTPS",
+    "FOTO_3X4": "Foto 3x4",
+    "OUTRO": "Outro",
+}
+CHECKLIST = ["RG", "CPF", "COMPROVANTE_RESIDENCIA"]  # igual a API (checklist mockado do M1)
+
+# Proximo passo do fluxo no DEMO. A regra oficial das transicoes mora na API.
+PROXIMO = {
+    "TRIAGEM": "ENTREVISTA", "TESTES": "ENTREVISTA", "ENTREVISTA": "APROVADO", "APROVADO": "AGUARDANDO_CANDIDATO",
+    "AGUARDANDO_CANDIDATO": "VALIDACAO_DP", "VALIDACAO_DP": "ASSINATURA", "ASSINATURA": "ENVIO_ERP", "ENVIO_ERP": "ADMITIDO",
+}
+ACAO_AVANCAR = {
+    "TRIAGEM": "Aprovar triagem", "ENTREVISTA": "Aprovar candidato", "APROVADO": "Pedir documentos",
+    "AGUARDANDO_CANDIDATO": "Documentos recebidos", "VALIDACAO_DP": "Validar e seguir para assinatura",
+    "ASSINATURA": "Enviar ao ERP", "ENVIO_ERP": "Confirmar admissao",
+}
+
 
 @dataclass
 class Vaga:
@@ -31,28 +53,24 @@ class Vaga:
 
 
 @dataclass
+class Documento:
+    id: str
+    tipo: str
+    nome_arquivo: str
+    status: str = "PENDENTE"  # PENDENTE | APROVADO | RECUSADO
+    motivo: str | None = None
+
+
+@dataclass
 class Chamado:
     protocolo: str
     vaga_id: str
     nome: str
     status: str = "TRIAGEM"
     historico: list[tuple[str, str]] = field(default_factory=list)  # (status, motivo)
-
-
-CHECKLIST = {
-    "RG": "RG",
-    "CPF": "CPF",
-    "COMPROVANTE_RESIDENCIA": "Comprovante de residencia",
-}  # mesma lista fixa da API no M1
-
-
-@dataclass
-class Documento:
-    tipo: str
-    mime: str
-    tamanho_bytes: int
-    status: str = "PENDENTE"  # PENDENTE | APROVADO | RECUSADO
-    motivo: str | None = None
+    responsavel: str | None = None
+    prazo_sla: datetime | None = None
+    documentos: list[Documento] = field(default_factory=list)
 
 
 class Gateway(Protocol):
@@ -61,8 +79,10 @@ class Gateway(Protocol):
     def criar_chamado(self, vaga_id: str, nome: str) -> Chamado: ...
     def obter_chamado(self, protocolo: str) -> Chamado | None: ...
     def listar_chamados(self) -> list[Chamado]: ...
-    def listar_documentos(self, protocolo: str) -> list[Documento]: ...
-    def enviar_documento(self, protocolo: str, tipo: str, mime: str, tamanho_bytes: int) -> Documento: ...
+    def enviar_documento(self, protocolo: str, tipo: str, nome_arquivo: str) -> Documento | None: ...
+    def obter_documento(self, doc_id: str) -> tuple[Chamado, Documento] | None: ...
+    def decidir_documento(self, doc_id: str, aprovar: bool, motivo: str = "") -> Chamado | None: ...
+    def avancar(self, protocolo: str) -> Chamado | None: ...
 
 
 class DemoGateway:
@@ -74,11 +94,25 @@ class DemoGateway:
                        "Separacao, conferencia e expedicao. Uso de EPI."),
         }
         self._chamados: dict[str, Chamado] = {}
-        self._documentos: dict[str, list[Documento]] = {}
         self._seq = 0
-        for nome, st in [("Ana Souza", "VALIDACAO_DP"), ("Bruno Lima", "TRIAGEM")]:
+        self._seq_doc = 0
+        agora = datetime.now(timezone.utc)
+        seeds = [
+            ("Ana Souza", "VALIDACAO_DP", "Carla (DP)", agora - timedelta(hours=5)),
+            ("Bruno Lima", "TRIAGEM", "Diego (RH)", agora + timedelta(hours=10)),
+            ("Carlos Mota", "AGUARDANDO_CANDIDATO", None, agora + timedelta(days=3)),
+            ("Daniela Reis", "ENTREVISTA", "Diego (RH)", agora + timedelta(days=1, hours=8)),
+            ("Eduardo Nunes", "ADMITIDO", "Carla (DP)", None),
+        ]
+        for nome, st, resp, prazo in seeds:
             c = self.criar_chamado("v1", nome)
-            c.status = st
+            c.status, c.responsavel, c.prazo_sla = st, resp, prazo
+        # Ana (validacao do DP) ja enviou os tres documentos; o RH decide na tela.
+        ana = self._chamados["ADM-2026-000001"]
+        for tipo in CHECKLIST:
+            self.enviar_documento(ana.protocolo, tipo, f"{tipo.lower()}.pdf")
+        ana.historico += [("APROVADO", "Entrevista aprovada"), ("AGUARDANDO_CANDIDATO", "Documentos solicitados"),
+                          ("VALIDACAO_DP", "Documentos recebidos")]
 
     def listar_vagas(self) -> list[Vaga]:
         return list(self._vagas.values())
@@ -98,11 +132,34 @@ class DemoGateway:
     def listar_chamados(self) -> list[Chamado]:
         return list(self._chamados.values())
 
-    def listar_documentos(self, protocolo: str) -> list[Documento]:
-        return list(self._documentos.get(protocolo, []))
-
-    def enviar_documento(self, protocolo: str, tipo: str, mime: str, tamanho_bytes: int) -> Documento:
-        # O demo guarda so os metadados; o conteudo nao fica na memoria do portal.
-        d = Documento(tipo, mime, tamanho_bytes)
-        self._documentos.setdefault(protocolo, []).append(d)
+    def enviar_documento(self, protocolo: str, tipo: str, nome_arquivo: str) -> Documento | None:
+        c = self._chamados.get(protocolo)
+        if not c:
+            return None
+        self._seq_doc += 1
+        d = Documento(f"d{self._seq_doc}", tipo, nome_arquivo)
+        c.documentos.append(d)
         return d
+
+    def obter_documento(self, doc_id: str) -> tuple[Chamado, Documento] | None:
+        for c in self._chamados.values():
+            for d in c.documentos:
+                if d.id == doc_id:
+                    return c, d
+        return None
+
+    def decidir_documento(self, doc_id: str, aprovar: bool, motivo: str = "") -> Chamado | None:
+        achado = self.obter_documento(doc_id)
+        if not achado or achado[1].status != "PENDENTE":
+            return None
+        c, d = achado
+        d.status, d.motivo = ("APROVADO", None) if aprovar else ("RECUSADO", motivo.strip())
+        return c
+
+    def avancar(self, protocolo: str) -> Chamado | None:
+        c = self._chamados.get(protocolo)
+        if not c or c.status not in PROXIMO:
+            return None
+        c.status = PROXIMO[c.status]
+        c.historico.append((c.status, "Avancado pelo RH (demo)"))
+        return c
