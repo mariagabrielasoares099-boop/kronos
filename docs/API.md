@@ -36,6 +36,7 @@ Limite próprio: 5 tentativas por minuto por IP. O código TOTP (6 dígitos, 30 
 | GET | `/chamados?status=&busca=&limite=` | equipe (RECRUTADOR, DP, GESTOR_VAGA, AVALIADOR, ALMOXARIFADO) | `200` fila por prazo de SLA, sem CPF/e-mail / `400` |
 | GET | `/chamados/:protocolo/resumo` | equipe | `200` / `404` |
 | GET | `/chamados/:id/eventos` | equipe | `200` linha do tempo / `404` |
+| POST | `/chamados/:id/atribuicao` | RECRUTADOR, DP | `200` atribuído (ou já estava) / `400` / `404` / `409` |
 | POST | `/chamados/:id/transicoes` | RECRUTADOR, DP | `200` / `409` |
 
 ### Painel da equipe no portal web
@@ -49,7 +50,23 @@ O portal não decide acesso: repassa o que a API responde (`401` volta ao login,
   outro parâmetro responde `400`. Ordena pelo prazo de SLA mais próximo (sem prazo por último). Vaga, candidato e responsável
   vêm como nome (ou `null` se o RLS esconder); **CPF e e-mail nunca saem nesta resposta**.
 - **Documentos exigem atribuição:** quem enxerga o chamado mas não está atribuído a ele recebe `404` em
-  `GET /chamados/:id/documentos` (regra do RLS). O painel mostra um aviso nesse caso. Ainda não há rota para atribuir.
+  `GET /chamados/:id/documentos` (regra do RLS). O painel avisa e oferece **"Assumir este chamado"**
+  (`POST /chamados/:id/atribuicao`), sem tocar no banco.
+
+#### `POST /chamados/:id/atribuicao`
+
+Corpo opcional `{ "usuarioId": "<uuid>" }`; sem ele, a própria pessoa assume o chamado. Resposta `200`:
+`{ "chamadoId", "usuarioId", "usuarioNome", "jaAtribuido" }` (repetir é idempotente: `jaAtribuido: true`, nada é gravado).
+
+- **Quem chama:** só `RECRUTADOR` ou `DP` (`403` para os demais papéis e para o candidato; `401` sem token). O chamado precisa
+  ser visível a quem atribui: chamado de outra empresa ou de outro tenant responde `404`, igual a inexistente.
+- **Quem pode ser atribuído:** usuário do **mesmo tenant**, com papel `RECRUTADOR` ou `DP` (os que operam documentos) e
+  **vínculo com a empresa do chamado**. Usuário de outro tenant ou inexistente: `404`. Sem vínculo com a empresa ou com outro
+  papel: `409` (mesma mensagem, de propósito). O trigger `enforce_assignment_company` do banco repete a regra do vínculo.
+- **Efeitos (uma transação):** linha em `ticket_assignments`, `tickets.responsavel` (o que a fila mostra) e evento de
+  auditoria `ATRIBUICAO` em `ticket_events` com `autor` (quem atribuiu) e `payload` `{ usuarioId, usuarioNome }`. A linha do
+  tempo (`GET /chamados/:id/eventos`) o devolve com `detalhe` (`"Atribuido a <nome>"`), `de`/`para` nulos.
+- Não há rota para **remover** atribuição nem para listar quem pode ser atribuído; o painel só oferece "assumir".
 
 ### Entrada do candidato no portal
 

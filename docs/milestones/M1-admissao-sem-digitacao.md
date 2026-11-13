@@ -63,7 +63,9 @@ Já existe: rota `/painel` em modo demo e, fora dele, o painel pela API real (lo
 - [ ] Ação "Enviar ao ERP": o botão do status `ASSINATURA` só avança o status; a exportação real é a etapa 4 (a trava forte por documento aprovado fica na M2)
 - [x] Substituir os dados do modo demo por chamadas à API quando `DEMO_MODE=false`
 - [x] Testes `pytest` das rotas e dos fragmentos HTMX (`tests/test_equipe.py`, com a API simulada) e roteiro em navegador contra API e portal reais (desktop e celular)
-- [ ] Atribuir o chamado a alguém da equipe: **não existe rota**. A API só mostra e decide documentos para quem está atribuído (`ticket_assignments`, via RLS); sem atribuição o painel avisa e não oferece decisão. Hoje a atribuição é feita direto no banco (como em `apps/api/scripts/e2e.mjs`)
+- [x] Atribuir o chamado: `POST /chamados/:id/atribuicao` (RECRUTADOR/DP; atribuído do mesmo tenant, RECRUTADOR/DP e com vínculo com a empresa; evento `ATRIBUICAO` na auditoria) e botão "Assumir este chamado" no painel. Documentos só aparecem e só são decididos por quem está atribuído (RLS)
+- [ ] Remover atribuição, atribuir a outra pessoa pela tela e listar quem pode ser atribuído (a API aceita `usuarioId`, o painel só oferece "assumir")
+- [ ] Esconder no painel os botões que o papel não pode usar (ex.: `GESTOR_VAGA` vê "avançar" e a API responde `403`): o login devolve `papel`, mas o portal ainda não o guarda
 - [ ] Nome da pessoa logada no topo: `POST /auth/login` devolve só `token`, `expiraEm` e `papel`
 
 **Pronto quando:** o RH aprova/recusa um documento e o status e a linha do tempo atualizam na tela.
