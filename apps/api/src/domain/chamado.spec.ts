@@ -156,6 +156,18 @@ describe('Admissao', () => {
     );
   });
 
+  it('preserva as datas validadas ao alterar a entrada ou as datas devolvidas', () => {
+    const nascimento = new Date('1995-03-10');
+    const dataAdmissao = new Date('2026-12-01');
+    const a = Admissao.criar({ ...dados, nascimento, dataAdmissao }, new Date('2026-11-07'));
+    nascimento.setFullYear(2030);
+    dataAdmissao.setTime(NaN);
+    a.nascimento.setFullYear(2040);
+    a.dataAdmissao.setTime(NaN);
+    expect(a.nascimento.toISOString()).toBe('1995-03-10T00:00:00.000Z');
+    expect(a.dataAdmissao.toISOString()).toBe('2026-12-01T00:00:00.000Z');
+  });
+
   it('rejeita datas invalidas antes de comparar nascimento e admissao', () => {
     const hoje = new Date('2026-11-07');
     expect(() => Admissao.criar({ ...dados, nascimento: new Date('invalida') }, hoje)).toThrow(AdmissaoInvalidaError);

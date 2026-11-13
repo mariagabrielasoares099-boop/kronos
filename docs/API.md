@@ -14,6 +14,19 @@ Todas as rotas (exceto `/health`, `/openapi.json`, `/portal/link` e `/portal/ses
 Limite padrão: 60 requisições por minuto por IP e rota (`429` ao exceder).
 Limites adicionais por usuário e tenant ainda estão pendentes no passo 3.
 
+### Login da equipe (`POST /auth/login`)
+
+Corpo: `{ "email", "senha", "codigo"? }`. Resposta `200`: `{ "token", "expiraEm", "papel" }` (token de 8 h, usado como `Bearer`).
+
+| Situação | Resposta |
+|---|---|
+| E-mail inexistente, senha ou código errados | `401` "Credenciais invalidas" (a mesma para os três) |
+| Senha certa, RH sem `codigo` | `401` com `codigo2fa: true` |
+| RH (ADMIN, RECRUTADOR, DP) sem 2FA cadastrado | `403` |
+| 5 falhas seguidas | `429` por 15 minutos (conta bloqueada) |
+
+Limite próprio: 5 tentativas por minuto por IP. O código TOTP (6 dígitos, 30 s) vale uma única vez. Senha em scrypt; segredo TOTP cifrado em AES-256-GCM com `ENCRYPTION_KEY`. A API lê hash e segredo só pelas funções `auth_*` do banco. Cadastro do primeiro usuário: `apps/api/scripts/criar-usuario.mjs`.
+
 ## Endpoints
 
 | Método | Rota | Papéis | Resposta |
