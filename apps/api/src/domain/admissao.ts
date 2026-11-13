@@ -30,12 +30,15 @@ export class Admissao {
     readonly chamadoId: string,
     readonly nome: string,
     readonly cpf: Cpf,
-    readonly nascimento: Date,
+    private readonly nascimentoTimestamp: number,
     readonly endereco: Readonly<EnderecoAdmissao>,
     readonly cargo: string,
     readonly salarioCentavos: number,
-    readonly dataAdmissao: Date,
+    private readonly dataAdmissaoTimestamp: number,
   ) {}
+
+  get nascimento(): Date { return new Date(this.nascimentoTimestamp); }
+  get dataAdmissao(): Date { return new Date(this.dataAdmissaoTimestamp); }
 
   static criar(d: AdmissaoDados, hoje: Date = new Date()): Admissao {
     const nome = d.nome.trim();
@@ -60,11 +63,11 @@ export class Admissao {
       d.chamadoId,
       nome,
       Cpf.criar(d.cpf),
-      d.nascimento,
+      d.nascimento.getTime(),
       Object.freeze({ ...d.endereco, cep: d.endereco.cep.replace(/\D/g, '') }),
       cargo,
       d.salarioCentavos,
-      d.dataAdmissao,
+      d.dataAdmissao.getTime(),
     );
   }
 }
