@@ -113,6 +113,7 @@ def test_upload_sem_sessao_ou_com_arquivo_invalido_nao_chega_a_api():
 def test_sessao_expirada_na_api_volta_a_pedir_cpf_e_limpa_o_cookie():
     c, fake = make()
     entrar(c)
+    c.cookies.clear()
     c.cookies.set("kronos_portal", "token.vencido", path="/chamado")
     r = c.get(f"/chamado/{PROTOCOLO}")
     assert r.status_code == 401 and "sessao expirou" in r.text
@@ -138,3 +139,12 @@ def test_entrar_tem_rate_limit():
     c, _ = make(max_calls=2)
     codes = [entrar(c).status_code for _ in range(3)]
     assert codes == [303, 303, 429]
+
+
+def test_candidatura_fora_do_demo_nao_cria_protocolo_ficticio():
+    c, fake = make()
+    r = c.post("/vagas/v1/candidatar", data={"nome": "Maria Silva", "email": "maria@example.com",
+                                             "cpf": CPF, "consentimento": "on"})
+    assert r.status_code == 503
+    assert "location" not in r.headers
+    assert fake.chamadas == []

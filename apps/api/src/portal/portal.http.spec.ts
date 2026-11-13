@@ -83,6 +83,16 @@ describe.skipIf(!ADMIN || !APP)('Portal do candidato: entrada + upload ponta a p
 
   let bearer = '';
 
+  it('nao escolhe tenant arbitrariamente quando CPF e protocolo coincidem', async () => {
+    await admin.query('UPDATE candidates SET cpf = $1 WHERE id = $2', [CPF, candT2]);
+    try {
+      const r = await admin.query('SELECT * FROM auth_candidato($1, $2)', ['ADM-2026-000001', CPF]);
+      expect(r.rows).toEqual([]);
+    } finally {
+      await admin.query('UPDATE candidates SET cpf = $1 WHERE id = $2', [CPF_T2, candT2]);
+    }
+  });
+
   it('protocolo + CPF corretos devolvem token; o mesmo protocolo em outro tenant e resolvido pelo CPF', async () => {
     const r = await entrar('ADM-2026-000001', '529.982.247-25').expect(200);
     expect(r.body.token).toBeTypeOf('string');

@@ -30,6 +30,9 @@ apenas o chamado do próprio candidato e seus documentos (`GET`/`POST /chamados/
 `GET /documentos/:id/arquivo`); o RLS faz o resto. Protocolo inexistente, CPF de outra pessoa e CPF inválido
 respondem o mesmo `401`. Limite de 5 tentativas por minuto por IP (`429`).
 
+Se CPF e protocolo coincidirem em mais de um tenant, a entrada tambem e recusada; nunca se escolhe um tenant
+arbitrariamente. O fluxo futuro com codigo/link precisa identificar o contexto correto da candidatura.
+
 Limitação: protocolo + CPF é uma credencial fraca (o CPF é dado semipúblico e o protocolo é sequencial). Serve para a
 demo; antes de uso real, trocar por link com código de uso único enviado por e-mail ao candidato.
 

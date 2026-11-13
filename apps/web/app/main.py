@@ -68,6 +68,8 @@ def create_app(
         cpf: str = Form("", max_length=20),
         consentimento: str = Form(""),
     ):
+        if not cfg.demo_mode:
+            raise HTTPException(503, "Candidatura indisponivel: integracao com a API ainda nao implementada.")
         v = gw.obter_vaga(vaga_id)
         if not v:
             raise HTTPException(404)
