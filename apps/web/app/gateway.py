@@ -71,6 +71,7 @@ class Chamado:
     responsavel: str | None = None
     prazo_sla: datetime | None = None
     documentos: list[Documento] = field(default_factory=list)
+    docs_indisponiveis: bool = False  # API: equipe sem atribuicao ao chamado nao ve os documentos
 
 
 class Gateway(Protocol):

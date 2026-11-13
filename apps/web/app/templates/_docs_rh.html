@@ -1,6 +1,10 @@
 <section id="docs" class="docs">
   <h2>Documentos</h2>
   {% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
+  {% if chamado.docs_indisponiveis %}
+  <p class="muted" role="status">Voc&ecirc; ainda n&atilde;o est&aacute; atribu&iacute;do a este chamado, por isso os documentos
+    n&atilde;o aparecem. Pe&ccedil;a a atribui&ccedil;&atilde;o a quem opera o chamado.</p>
+  {% else %}
   <ul class="checklist">
     {% for item in checklist %}
     <li class="item item-{{ item.status|lower }}">
@@ -21,4 +25,5 @@
     </li>
     {% endfor %}
   </ul>
+  {% endif %}
 </section>

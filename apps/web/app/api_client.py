@@ -167,9 +167,11 @@ class ApiClient:
         resumo = r.json()
         ev = self._equipe("GET", f"/chamados/{resumo['id']}/eventos", token)
         dc = self._equipe("GET", f"/chamados/{resumo['id']}/documentos", token)
-        if ev.status_code != 200 or dc.status_code != 200:
+        if ev.status_code != 200 or dc.status_code not in (200, 404):
             raise ApiIndisponivel()
-        return {"resumo": resumo, "eventos": ev.json(), "documentos": dc.json().get("documentos", [])}
+        # 404 nos documentos com o chamado visivel: a pessoa nao esta atribuida a ele (regra da API, via RLS).
+        docs = dc.json().get("documentos", []) if dc.status_code == 200 else None
+        return {"resumo": resumo, "eventos": ev.json(), "documentos": docs}
 
     def decidir_documento(self, doc_id: str, aprovar: bool, motivo: str, token: str) -> bool:
         """True quando gravado; False se o documento nao existe/nao e visivel. Conflito se ja decidido."""

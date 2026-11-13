@@ -356,9 +356,10 @@ def create_app(
         r = dados["resumo"]
         prazo = datetime.fromisoformat(r["prazoSla"].replace("Z", "+00:00")) if r.get("prazoSla") else None
         historico = [(e["para"], e["motivo"] or "") for e in dados.get("eventos", []) if e.get("para")]
-        docs = [Documento(d["id"], d["tipo"], "", d["status"], d.get("motivo")) for d in dados.get("documentos", [])]
+        lista = dados.get("documentos")
+        docs = [Documento(d["id"], d["tipo"], "", d["status"], d.get("motivo")) for d in lista or []]
         return Chamado(r["protocolo"], "", r.get("candidatoNome") or "-", r["status"], historico,
-                       r.get("responsavelNome"), prazo, docs)
+                       r.get("responsavelNome"), prazo, docs, docs_indisponiveis="documentos" in dados and lista is None)
 
     @app.get("/painel", response_class=HTMLResponse)
     def painel(request: Request):

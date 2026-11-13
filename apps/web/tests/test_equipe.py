@@ -33,6 +33,7 @@ class FakeApi:
         self.transicoes: list[dict] = []
         self.status_doc = "PENDENTE"
         self.motivo_doc = None
+        self.sem_atribuicao = False
 
     def equipe(self, req: httpx.Request) -> httpx.Response:
         """Rotas da API usadas pelo painel; exige o token da equipe como a API real."""
@@ -51,6 +52,8 @@ class FakeApi:
                 {"tipo": "TRANSICAO", "de": "TRIAGEM", "para": "VALIDACAO_DP", "motivo": "ok", "autorNome": "Rita RH",
                  "em": "2019-12-02T00:00:00Z"},
             ])
+        if path == f"/chamados/{CHAMADO_ID}/documentos" and self.sem_atribuicao:
+            return httpx.Response(404)  # a API esconde documentos de quem nao esta atribuido
         if path == f"/chamados/{CHAMADO_ID}/documentos":
             return httpx.Response(200, json={"documentos": [
                 {"id": DOC_ID, "tipo": "RG", "status": self.status_doc, "motivo": self.motivo_doc}], "checklist": []})
@@ -255,3 +258,20 @@ def test_ver_documento_baixa_pela_api_como_anexo_e_so_do_proprio_chamado():
     assert c.get(f"/painel/chamado/{PROTOCOLO}/documentos/x/arquivo").status_code == 404
     c.cookies.clear()
     assert c.get(f"/painel/chamado/{PROTOCOLO}/documentos/{DOC_ID}/arquivo").status_code == 303
+
+
+def test_equipe_sem_atribuicao_ve_o_chamado_mas_nao_os_documentos_e_nao_recebe_502():
+    c, fake = logado()
+    fake.sem_atribuicao = True
+    r = c.get(f"/painel/chamado/{PROTOCOLO}/detalhe")
+    assert r.status_code == 200 and "Ana Souza" in r.text and "n&atilde;o est&aacute; atribu" in r.text
+    assert "Aguardando decisao" not in r.text and "btn-ok" not in r.text  # nada para decidir sem atribuicao
+    assert c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "aprovar", "protocolo": PROTOCOLO}).status_code == 404
+    assert fake.decisoes == []
+
+
+def test_layout_do_rh_com_login_real_tem_menu_sair_e_sem_nome_de_demonstracao():
+    c, _ = logado()
+    page = c.get("/painel/fila").text
+    assert 'class="area-rh"' in page and 'action="/sair"' in page and "Diego" not in page
+    assert "Portal de vagas" not in page and "includeIndicatorStyles" in page  # htmx sem estilo inline (CSP)
