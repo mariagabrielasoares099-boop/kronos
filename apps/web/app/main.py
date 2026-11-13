@@ -1,12 +1,13 @@
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .arquivos import TAMANHO_MAXIMO_BYTES, ArquivoInvalido, validar_arquivo
 from .config import Settings, load_settings
-from .gateway import STATUS_LABELS, STATUSES, DemoGateway, Gateway
+from .gateway import CHECKLIST, STATUS_LABELS, STATUSES, DemoGateway, Gateway
 from .security import RateLimiter, SecurityHeadersMiddleware
 from .validators import is_valid_cpf, is_valid_email, only_digits
 
@@ -84,7 +85,41 @@ def create_app(settings: Settings | None = None, gateway: Gateway | None = None)
         c = gw.obter_chamado(protocolo)
         if not c:
             raise HTTPException(404)
-        return render(request, "chamado.html", chamado=c, vaga=gw.obter_vaga(c.vaga_id))
+        return render_chamado(request, c)
+
+    def render_chamado(request: Request, c, status_code: int = 200, erro: str | None = None):
+        docs = gw.listar_documentos(c.protocolo)
+        itens = []
+        for tipo, rotulo in CHECKLIST.items():
+            ultimo = next((d for d in reversed(docs) if d.tipo == tipo), None)
+            itens.append({"tipo": tipo, "rotulo": rotulo, "doc": ultimo})
+        return render(request, "chamado.html", status_code=status_code, chamado=c,
+                      vaga=gw.obter_vaga(c.vaga_id), checklist=itens, erro_upload=erro)
+
+    @app.post("/chamado/{protocolo}/documentos")
+    async def enviar_documento(
+        request: Request,
+        protocolo: str,
+        tipo: str = Form("", max_length=40),
+        arquivo: UploadFile = File(None),
+    ):
+        c = gw.obter_chamado(protocolo)
+        if not c:
+            raise HTTPException(404)
+        ip = request.client.host if request.client else "?"
+        if not limiter.allow(f"upload:{ip}"):
+            raise HTTPException(429, "Muitas tentativas. Aguarde um minuto.")
+        try:
+            if tipo not in CHECKLIST:
+                raise ArquivoInvalido("Escolha o tipo do documento.")
+            if arquivo is None:
+                raise ArquivoInvalido("Selecione um arquivo.")
+            conteudo = await arquivo.read(TAMANHO_MAXIMO_BYTES + 1)  # nunca le alem do teto
+            mime = validar_arquivo(conteudo)
+        except ArquivoInvalido as e:
+            return render_chamado(request, c, status_code=e.status_code, erro=str(e))
+        gw.enviar_documento(protocolo, tipo, mime, len(conteudo))
+        return RedirectResponse(f"/chamado/{protocolo}", status_code=303)
 
     @app.get("/painel", response_class=HTMLResponse)
     def painel(request: Request):

@@ -84,3 +84,44 @@ def test_lista_de_vagas_em_vagas_e_na_raiz():
     c = make()
     assert c.get("/vagas").status_code == 200
     assert c.get("/vagas").text == c.get("/").text
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+
+
+def _chamado(c):
+    return c.post("/vagas/v1/candidatar", data=VALID).headers["location"]
+
+
+def test_upload_valido_marca_item_em_analise():
+    c = make()
+    url = _chamado(c)
+    assert "faltando" in c.get(url).text
+    r = c.post(url + "/documentos", data={"tipo": "RG"}, files={"arquivo": ("rg.png", PNG, "image/png")})
+    assert r.status_code == 303 and r.headers["location"] == url
+    assert "em analise" in c.get(url).text
+
+
+def test_upload_confere_conteudo_e_nao_a_extensao():
+    c = make()
+    url = _chamado(c)
+    r = c.post(url + "/documentos", data={"tipo": "RG"}, files={"arquivo": ("rg.png", b"MZ nao e imagem", "image/png")})
+    assert r.status_code == 422 and "Tipo nao permitido" in r.text
+    assert "em analise" not in c.get(url).text
+
+
+def test_upload_rejeita_arquivo_grande_vazio_e_tipo_desconhecido():
+    c = make()
+    url = _chamado(c)
+    grande = PNG + b"0" * (5 * 1024 * 1024)
+    assert c.post(url + "/documentos", data={"tipo": "RG"}, files={"arquivo": ("a.png", grande, "image/png")}).status_code == 413
+    assert c.post(url + "/documentos", data={"tipo": "RG"}, files={"arquivo": ("a.png", b"", "image/png")}).status_code == 422
+    assert c.post(url + "/documentos", data={"tipo": "CTPS"}, files={"arquivo": ("a.png", PNG, "image/png")}).status_code == 422
+
+
+def test_upload_em_chamado_inexistente_e_404_e_tem_rate_limit():
+    c = make(max_calls=2)
+    assert c.post("/chamado/ADM-2026-999999/documentos", data={"tipo": "RG"}, files={"arquivo": ("a.png", PNG)}).status_code == 404
+    url = _chamado(c)
+    codes = [c.post(url + "/documentos", data={"tipo": "RG"}, files={"arquivo": ("a.png", PNG)}).status_code for _ in range(3)]
+    assert codes[-1] == 429 and 303 in codes

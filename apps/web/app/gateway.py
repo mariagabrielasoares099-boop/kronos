@@ -39,12 +39,30 @@ class Chamado:
     historico: list[tuple[str, str]] = field(default_factory=list)  # (status, motivo)
 
 
+CHECKLIST = {
+    "RG": "RG",
+    "CPF": "CPF",
+    "COMPROVANTE_RESIDENCIA": "Comprovante de residencia",
+}  # mesma lista fixa da API no M1
+
+
+@dataclass
+class Documento:
+    tipo: str
+    mime: str
+    tamanho_bytes: int
+    status: str = "PENDENTE"  # PENDENTE | APROVADO | RECUSADO
+    motivo: str | None = None
+
+
 class Gateway(Protocol):
     def listar_vagas(self) -> list[Vaga]: ...
     def obter_vaga(self, vaga_id: str) -> Vaga | None: ...
     def criar_chamado(self, vaga_id: str, nome: str) -> Chamado: ...
     def obter_chamado(self, protocolo: str) -> Chamado | None: ...
     def listar_chamados(self) -> list[Chamado]: ...
+    def listar_documentos(self, protocolo: str) -> list[Documento]: ...
+    def enviar_documento(self, protocolo: str, tipo: str, mime: str, tamanho_bytes: int) -> Documento: ...
 
 
 class DemoGateway:
@@ -56,6 +74,7 @@ class DemoGateway:
                        "Separacao, conferencia e expedicao. Uso de EPI."),
         }
         self._chamados: dict[str, Chamado] = {}
+        self._documentos: dict[str, list[Documento]] = {}
         self._seq = 0
         for nome, st in [("Ana Souza", "VALIDACAO_DP"), ("Bruno Lima", "TRIAGEM")]:
             c = self.criar_chamado("v1", nome)
@@ -78,3 +97,12 @@ class DemoGateway:
 
     def listar_chamados(self) -> list[Chamado]:
         return list(self._chamados.values())
+
+    def listar_documentos(self, protocolo: str) -> list[Documento]:
+        return list(self._documentos.get(protocolo, []))
+
+    def enviar_documento(self, protocolo: str, tipo: str, mime: str, tamanho_bytes: int) -> Documento:
+        # O demo guarda so os metadados; o conteudo nao fica na memoria do portal.
+        d = Documento(tipo, mime, tamanho_bytes)
+        self._documentos.setdefault(protocolo, []).append(d)
+        return d

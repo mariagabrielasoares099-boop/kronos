@@ -7,6 +7,30 @@
 {% if chamado.status == 'AGUARDANDO_CANDIDATO' %}
   <p class="alerta">Ha documentos pendentes. Envie-os para continuar.</p>
 {% endif %}
+<h2>Documentos</h2>
+{% if erro_upload %}<p class="alerta" role="alert">{{ erro_upload }}</p>{% endif %}
+<ul class="checklist">
+  {% for item in checklist %}
+  <li>
+    <strong>{{ item.rotulo }}</strong> &mdash;
+    {% if not item.doc %}faltando
+    {% elif item.doc.status == 'APROVADO' %}aprovado
+    {% elif item.doc.status == 'RECUSADO' %}recusado{% if item.doc.motivo %}: {{ item.doc.motivo }}{% endif %}
+    {% else %}em analise{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<form method="post" action="/chamado/{{ chamado.protocolo }}/documentos" enctype="multipart/form-data">
+  <label>Documento
+    <select name="tipo" required>
+      {% for item in checklist %}<option value="{{ item.tipo }}">{{ item.rotulo }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Arquivo (JPG, PNG ou PDF, ate 5 MB)
+    <input type="file" name="arquivo" accept="image/jpeg,image/png,application/pdf" capture="environment" required>
+  </label>
+  <button type="submit">Enviar documento</button>
+</form>
 <h2>Historico</h2>
 <ol class="timeline">
   {% for st, motivo in chamado.historico %}
