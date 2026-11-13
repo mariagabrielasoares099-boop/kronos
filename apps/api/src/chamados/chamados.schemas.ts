@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidCpf } from '../domain/br-docs.js';
+import { TicketStatus } from '../domain/ticket-status.js';
 
 export const CriarChamadoSchema = z
   .object({
@@ -24,6 +25,16 @@ export const TransicaoSchema = z.discriminatedUnion('acao', [
   z.object({ acao: z.literal('REPROVAR'), motivo: z.string().trim().min(3).max(500) }).strict(),
 ]);
 export type TransicaoDto = z.infer<typeof TransicaoSchema>;
+
+/** Filtros da fila do RH (querystring). Limite padrao 100, maximo 200. */
+export const ListarChamadosSchema = z
+  .object({
+    status: z.enum(Object.values(TicketStatus) as [TicketStatus, ...TicketStatus[]]).optional(),
+    busca: z.string().trim().max(60).optional(),
+    limite: z.coerce.number().int().min(1).max(200).default(100),
+  })
+  .strict();
+export type ListarChamadosDto = z.infer<typeof ListarChamadosSchema>;
 
 export const IdSchema = z.uuid();
 export const ProtocoloSchema = z.string().regex(/^ADM-\d{4}-\d{6}$/);

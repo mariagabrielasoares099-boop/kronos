@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post,
+  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post, Query,
 } from '@nestjs/common';
 import type { ZodType } from 'zod';
 import { Ctx, Papeis } from '../auth/auth.decorators.js';
@@ -9,7 +9,8 @@ import { InvalidTransitionError } from '../domain/ticket-status.js';
 import {
   CandidatoJaExisteError, ChamadoNaoEncontradoError, ChamadosService, ConflitoConcorrenciaError, VagaNaoEncontradaError,
 } from './chamados.service.js';
-import { CriarChamadoSchema, IdSchema, ProtocoloSchema, TransicaoSchema } from './chamados.schemas.js';
+import { CriarChamadoSchema, IdSchema, ListarChamadosSchema, ProtocoloSchema, TransicaoSchema } from './chamados.schemas.js';
+import { ConsultaService } from './consulta.service.js';
 
 /** Valida a entrada e informa SO o campo e o problema, nunca o valor recebido (pode ser dado pessoal). */
 function validar<T>(schema: ZodType<T>, valor: unknown): T {
@@ -37,7 +38,10 @@ async function traduzir<T>(fn: () => Promise<T>): Promise<T> {
 
 @Controller('chamados')
 export class ChamadosController {
-  constructor(@Inject(ChamadosService) private readonly service: ChamadosService) {}
+  constructor(
+    @Inject(ChamadosService) private readonly service: ChamadosService,
+    @Inject(ConsultaService) private readonly consulta: ConsultaService,
+  ) {}
 
   @Post()
   @HttpCode(201)
@@ -45,6 +49,29 @@ export class ChamadosController {
   criar(@Ctx() ctx: DbContext, @Body() body: unknown) {
     const dto = validar(CriarChamadoSchema, body);
     return traduzir(() => this.service.criar(ctx, dto));
+  }
+
+  /** Fila do RH: so a equipe (token de candidato nunca passa); o RLS filtra por empresa e atribuicao. */
+  @Get()
+  @Papeis('RECRUTADOR', 'DP', 'GESTOR_VAGA', 'AVALIADOR', 'ALMOXARIFADO')
+  listar(@Ctx() ctx: DbContext, @Query() query: unknown) {
+    return this.consulta.listar(ctx, validar(ListarChamadosSchema, query));
+  }
+
+  /** Detalhe para a equipe: nomes da vaga, da pessoa e do responsavel, e o prazo de SLA. */
+  @Get(':protocolo/resumo')
+  @Papeis('RECRUTADOR', 'DP', 'GESTOR_VAGA', 'AVALIADOR', 'ALMOXARIFADO')
+  resumo(@Ctx() ctx: DbContext, @Param('protocolo') protocolo: string) {
+    const p = validar(ProtocoloSchema, protocolo);
+    return traduzir(() => this.consulta.resumo(ctx, p));
+  }
+
+  /** Linha do tempo (ticket_events, append-only). So equipe: contem motivos de devolucao/reprovacao. */
+  @Get(':id/eventos')
+  @Papeis('RECRUTADOR', 'DP', 'GESTOR_VAGA', 'AVALIADOR', 'ALMOXARIFADO')
+  eventos(@Ctx() ctx: DbContext, @Param('id') id: string) {
+    const chamadoId = validar(IdSchema, id);
+    return traduzir(() => this.consulta.eventos(ctx, chamadoId));
   }
 
   /** Sem @Papeis: o RLS decide o que cada pessoa (inclusive o candidato) pode ver. */

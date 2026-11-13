@@ -33,6 +33,9 @@ Limite próprio: 5 tentativas por minuto por IP. O código TOTP (6 dígitos, 30 
 |--------|------|--------|----------|
 | POST | `/chamados` | RECRUTADOR, DP | `201` chamado aberto |
 | GET | `/chamados/:protocolo` | qualquer autenticado (o RLS filtra) | `200` / `404` |
+| GET | `/chamados?status=&busca=&limite=` | equipe (RECRUTADOR, DP, GESTOR_VAGA, AVALIADOR, ALMOXARIFADO) | `200` fila por prazo de SLA, sem CPF/e-mail / `400` |
+| GET | `/chamados/:protocolo/resumo` | equipe | `200` / `404` |
+| GET | `/chamados/:id/eventos` | equipe | `200` linha do tempo / `404` |
 | POST | `/chamados/:id/transicoes` | RECRUTADOR, DP | `200` / `409` |
 
 ### Entrada do candidato no portal
