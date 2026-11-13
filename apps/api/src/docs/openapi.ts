@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ROLES_KEY } from '../auth/auth.decorators.js';
-import { CriarChamadoSchema, ListarChamadosSchema, TransicaoSchema } from '../chamados/chamados.schemas.js';
+import { AtribuicaoSchema, CriarChamadoSchema, ListarChamadosSchema, TransicaoSchema } from '../chamados/chamados.schemas.js';
 import { ChamadosController } from '../chamados/chamados.controller.js';
 import { TicketStatus } from '../domain/ticket-status.js';
 
@@ -51,14 +51,28 @@ const ChamadoResumoView: Json = {
 const EventoView: Json = {
   type: 'object',
   description: 'Item da linha do tempo do chamado.',
-  required: ['tipo', 'de', 'para', 'motivo', 'autorNome', 'em'],
+  required: ['tipo', 'de', 'para', 'motivo', 'detalhe', 'autorNome', 'em'],
   properties: {
     tipo: { type: 'string' },
     de: { type: ['string', 'null'] },
     para: { type: ['string', 'null'] },
     motivo: { type: ['string', 'null'] },
+    detalhe: { type: ['string', 'null'], description: 'Texto pronto de eventos sem status, como a atribuicao.' },
     autorNome: { type: ['string', 'null'] },
     em: { type: 'string', format: 'date-time' },
+  },
+  additionalProperties: false,
+};
+
+const AtribuicaoView: Json = {
+  type: 'object',
+  description: 'Resultado da atribuicao. `jaAtribuido: true` = nada foi gravado de novo.',
+  required: ['chamadoId', 'usuarioId', 'usuarioNome', 'jaAtribuido'],
+  properties: {
+    chamadoId: { type: 'string', format: 'uuid' },
+    usuarioId: { type: 'string', format: 'uuid' },
+    usuarioNome: { type: 'string' },
+    jaAtribuido: { type: 'boolean' },
   },
   additionalProperties: false,
 };
@@ -218,6 +232,25 @@ export function construirOpenApi(): Json {
           },
         },
       },
+      '/chamados/{id}/atribuicao': {
+        post: {
+          tags: ['chamados'],
+          summary: 'Atribui o chamado a uma pessoa da equipe (por padrao, a quem chama)',
+          description: `${descricaoPapeis('atribuir', 'Somente equipe.')} Documentos so aparecem e so sao decididos por quem esta atribuido. `
+            + 'O atribuido precisa ser RECRUTADOR ou DP e ter vinculo com a empresa do chamado; o RLS exige que o chamado seja visivel a quem atribui. '
+            + 'Registra o evento `ATRIBUICAO` (autor, destino e data) na linha do tempo. Repetir e idempotente.',
+          parameters: [id],
+          requestBody: { required: false, content: { 'application/json': { schema: entrada(AtribuicaoSchema) } } },
+          responses: {
+            '200': resposta('Atribuido (ou ja estava)', 'AtribuicaoView'),
+            '400': resposta('Requisicao invalida'),
+            ...comuns,
+            '403': resposta('Papel sem permissao'),
+            '404': resposta('Chamado ou usuario nao encontrado (ou sem permissao para ve-los)'),
+            '409': resposta('Usuario sem vinculo com a empresa do chamado ou com papel que nao opera documentos'),
+          },
+        },
+      },
       '/chamados/{id}/transicoes': {
         post: {
           tags: ['chamados'],
@@ -238,7 +271,7 @@ export function construirOpenApi(): Json {
     },
     components: {
       securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } },
-      schemas: { ChamadoView, ChamadoResumoView, EventoView, Erro },
+      schemas: { ChamadoView, ChamadoResumoView, EventoView, AtribuicaoView, Erro },
     },
   };
 }

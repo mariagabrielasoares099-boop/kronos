@@ -9,7 +9,8 @@ import { InvalidTransitionError } from '../domain/ticket-status.js';
 import {
   CandidatoJaExisteError, ChamadoNaoEncontradoError, ChamadosService, ConflitoConcorrenciaError, VagaNaoEncontradaError,
 } from './chamados.service.js';
-import { CriarChamadoSchema, IdSchema, ListarChamadosSchema, ProtocoloSchema, TransicaoSchema } from './chamados.schemas.js';
+import { AtribuicaoSchema, CriarChamadoSchema, IdSchema, ListarChamadosSchema, ProtocoloSchema, TransicaoSchema } from './chamados.schemas.js';
+import { AtribuicaoService, UsuarioNaoAtribuivelError, UsuarioNaoEncontradoError } from './atribuicao.service.js';
 import { ConsultaService } from './consulta.service.js';
 
 /** Valida a entrada e informa SO o campo e o problema, nunca o valor recebido (pode ser dado pessoal). */
@@ -29,6 +30,8 @@ async function traduzir<T>(fn: () => Promise<T>): Promise<T> {
   } catch (e) {
     if (e instanceof VagaNaoEncontradaError) throw new NotFoundException('Vaga nao encontrada');
     if (e instanceof ChamadoNaoEncontradoError) throw new NotFoundException('Chamado nao encontrado');
+    if (e instanceof UsuarioNaoEncontradoError) throw new NotFoundException('Usuario nao encontrado');
+    if (e instanceof UsuarioNaoAtribuivelError) throw new ConflictException('Este usuario nao pode ser atribuido a este chamado');
     if (e instanceof CandidatoJaExisteError) throw new ConflictException('Ja existe candidato com este CPF');
     if (e instanceof ConflitoConcorrenciaError) throw new ConflictException('O chamado foi alterado por outra pessoa. Recarregue');
     if (e instanceof ChamadoError || e instanceof InvalidTransitionError) throw new ConflictException(e.message);
@@ -41,6 +44,7 @@ export class ChamadosController {
   constructor(
     @Inject(ChamadosService) private readonly service: ChamadosService,
     @Inject(ConsultaService) private readonly consulta: ConsultaService,
+    @Inject(AtribuicaoService) private readonly atribuicao: AtribuicaoService,
   ) {}
 
   @Post()
@@ -79,6 +83,19 @@ export class ChamadosController {
   obter(@Ctx() ctx: DbContext, @Param('protocolo') protocolo: string) {
     const p = validar(ProtocoloSchema, protocolo);
     return traduzir(() => this.service.obterPorProtocolo(ctx, p));
+  }
+
+  /**
+   * Atribui o chamado a uma pessoa da equipe (por padrao, a quem chama). Documentos so aparecem e so sao decididos por
+   * quem esta atribuido. Quem atribui precisa de RECRUTADOR/DP; o RLS e o trigger do banco validam tenant e empresa.
+   */
+  @Post(':id/atribuicao')
+  @HttpCode(200)
+  @Papeis('RECRUTADOR', 'DP')
+  atribuir(@Ctx() ctx: DbContext, @Param('id') id: string, @Body() body: unknown) {
+    const chamadoId = validar(IdSchema, id);
+    const dto = validar(AtribuicaoSchema, body ?? {});
+    return traduzir(() => this.atribuicao.atribuir(ctx, chamadoId, dto.usuarioId));
   }
 
   @Post(':id/transicoes')

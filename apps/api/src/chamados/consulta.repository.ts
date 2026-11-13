@@ -18,6 +18,7 @@ export interface EventoLeitura {
   de: string | null;
   para: string | null;
   motivo: string | null;
+  payload: unknown;
   autorNome: string | null;
   em: Date;
 }

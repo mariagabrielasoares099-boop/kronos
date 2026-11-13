@@ -84,7 +84,7 @@ export class PrismaConsultaChamados implements ConsultaChamados {
     const eventos = await this.tx.ticketEvent.findMany({
       where: { ticketId: chamadoId },
       orderBy: { createdAt: 'asc' },
-      select: { tipo: true, de: true, para: true, motivo: true, autor: true, createdAt: true },
+      select: { tipo: true, de: true, para: true, motivo: true, payload: true, autor: true, createdAt: true },
     });
     const autores = await this.tx.user.findMany({
       where: { id: { in: unicos(eventos.map((e) => e.autor)).filter((a) => /^[0-9a-f-]{36}$/i.test(a)) } },
@@ -92,7 +92,7 @@ export class PrismaConsultaChamados implements ConsultaChamados {
     });
     const nome = new Map(autores.map((u) => [u.id, u.nome]));
     return eventos.map((e) => ({
-      tipo: e.tipo, de: e.de, para: e.para, motivo: e.motivo, autorNome: e.autor ? (nome.get(e.autor) ?? null) : null, em: e.createdAt,
+      tipo: e.tipo, de: e.de, para: e.para, motivo: e.motivo, payload: e.payload, autorNome: e.autor ? (nome.get(e.autor) ?? null) : null, em: e.createdAt,
     }));
   }
 }

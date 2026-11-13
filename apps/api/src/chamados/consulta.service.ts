@@ -17,8 +17,16 @@ const resumoView = (c: ChamadoResumo) => ({
 });
 export type ChamadoResumoView = ReturnType<typeof resumoView>;
 
+/** Texto pronto da atribuicao para a linha do tempo (o nome vem do payload gravado no evento). */
+const detalheDe = (e: EventoLeitura): string | null => {
+  if (e.tipo !== 'ATRIBUICAO') return null;
+  const nome = (e.payload as { usuarioNome?: unknown } | null)?.usuarioNome;
+  return typeof nome === 'string' ? `Atribuido a ${nome}` : 'Atribuicao';
+};
+
 const eventoView = (e: EventoLeitura) => ({
-  tipo: e.tipo, de: e.de, para: e.para, motivo: e.motivo, autorNome: e.autorNome, em: e.em.toISOString(),
+  tipo: e.tipo, de: e.de, para: e.para, motivo: e.motivo, detalhe: detalheDe(e), autorNome: e.autorNome,
+  em: e.em.toISOString(),
 });
 export type EventoView = ReturnType<typeof eventoView>;
 

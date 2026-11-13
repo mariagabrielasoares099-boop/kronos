@@ -37,4 +37,7 @@ export const ListarChamadosSchema = z
 export type ListarChamadosDto = z.infer<typeof ListarChamadosSchema>;
 
 export const IdSchema = z.uuid();
+
+/** `usuarioId` omitido = a propria pessoa assume o chamado. */
+export const AtribuicaoSchema = z.object({ usuarioId: z.uuid().optional() }).strict();
 export const ProtocoloSchema = z.string().regex(/^ADM-\d{4}-\d{6}$/);
