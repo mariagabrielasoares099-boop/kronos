@@ -4,6 +4,7 @@ O portal nao decide nada de negocio nem de acesso: repassa o token que a API emi
 cabecalho Authorization e confia na resposta (RLS no banco). Nunca registra CPF, token nem conteudo de arquivo.
 """
 from dataclasses import dataclass
+from datetime import datetime
 
 import httpx
 
@@ -18,6 +19,21 @@ class ApiIndisponivel(Exception):
 class Sessao:
     token: str
     expira_em: int  # epoch em segundos
+
+
+@dataclass(frozen=True)
+class SessaoEquipe:
+    token: str
+    expira_em: int
+    papel: str
+
+
+class LoginRecusado(Exception):
+    """A API recusou o login. `motivo` e um de: credenciais, codigo_2fa, bloqueado, sem_2fa."""
+
+    def __init__(self, motivo: str) -> None:
+        super().__init__(motivo)
+        self.motivo = motivo
 
 
 def _bearer(token: str) -> dict[str, str]:
@@ -54,6 +70,26 @@ class ApiClient:
             raise ApiIndisponivel()
         corpo = r.json()
         return Sessao(corpo["token"], int(corpo["expiraEm"]))
+
+    def login_equipe(self, email: str, senha: str, codigo: str = "") -> SessaoEquipe:
+        """Senha + 2FA na API. Levanta LoginRecusado; a tela nunca distingue e-mail inexistente de senha errada."""
+        corpo = {"email": email, "senha": senha, **({"codigo": codigo} if codigo else {})}
+        r = self._chamar("POST", "/auth/login", json=corpo)
+        if r.status_code == 200:
+            j = r.json()
+            expira = datetime.fromisoformat(str(j["expiraEm"]).replace("Z", "+00:00"))  # a API manda ISO-8601
+            return SessaoEquipe(j["token"], int(expira.timestamp()), j["papel"])
+        if r.status_code == 401:
+            try:
+                pede_2fa = bool(r.json().get("codigo2fa"))
+            except ValueError:
+                pede_2fa = False
+            raise LoginRecusado("codigo_2fa" if pede_2fa else "credenciais")
+        if r.status_code == 429:
+            raise LoginRecusado("bloqueado")
+        if r.status_code == 403:
+            raise LoginRecusado("sem_2fa")
+        raise ApiIndisponivel()
 
     def obter_chamado(self, protocolo: str, token: str) -> dict | None:
         """None quando o token expirou/invalido (401) ou o chamado nao e deste candidato (404)."""

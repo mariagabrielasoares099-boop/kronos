@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .api_client import ApiClient, ApiIndisponivel
+from .api_client import ApiClient, ApiIndisponivel, LoginRecusado
 from .arquivos import TAMANHO_MAXIMO_BYTES, ArquivoInvalido, validar_arquivo
 from .config import Settings, load_settings
 from .fila import filtrar, sla_situacao
@@ -21,6 +21,7 @@ from .validators import is_valid_cpf, is_valid_email, only_digits
 
 BASE = Path(__file__).parent
 COOKIE_SESSAO = "kronos_portal"
+COOKIE_EQUIPE = "kronos_equipe"
 PROTOCOLO_RE = re.compile(r"^ADM-\d{4}-\d{6}$")
 CODIGO_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")  # 32 bytes em base64url (formato do codigo emitido pela API)
 SLA_LABELS = {"atrasado": "Atrasado", "vencendo": "Vence em 24h", "no_prazo": "No prazo", "sem_sla": "-"}
@@ -257,11 +258,68 @@ def create_app(
                 return pagina_entrar(request, protocolo, "Sua sessao expirou. Peca um novo link de acesso.", 401, limpar=True)
         return RedirectResponse(f"/chamado/{protocolo}", status_code=303)
 
+    # --- Login da equipe (fora do demo): senha + 2FA na API; o token fica so em cookie HttpOnly ---
+    def pagina_login(request: Request, email: str = "", erro: str | None = None, pede_2fa: bool = False,
+                     status_code: int = 200):
+        resp = render(request, "login.html", status_code=status_code, email=email, erro=erro, pede_2fa=pede_2fa)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_form(request: Request):
+        if portal_api is None:
+            raise HTTPException(404)
+        return pagina_login(request)
+
+    @app.post("/login", response_class=HTMLResponse)
+    def login(request: Request, email: str = Form("", max_length=320), senha: str = Form("", max_length=200),
+              codigo: str = Form("", max_length=10)):
+        if portal_api is None:
+            raise HTTPException(404)
+        ip = request.client.host if request.client else "?"
+        if not limiter.allow(f"login:{ip}"):
+            raise HTTPException(429, "Muitas tentativas. Aguarde um minuto.")
+        email = email.strip()
+        if not is_valid_email(email) or not senha:
+            return pagina_login(request, email, "Informe e-mail e senha.", status_code=422)
+        try:
+            sessao = portal_api.login_equipe(email, senha, codigo.strip())
+        except LoginRecusado as e:
+            if e.motivo == "codigo_2fa":
+                aviso = "Codigo invalido." if codigo.strip() else "Informe o codigo do aplicativo autenticador."
+                return pagina_login(request, email, aviso, pede_2fa=True, status_code=401)
+            if e.motivo == "bloqueado":
+                return pagina_login(request, email, "Muitas tentativas. Aguarde alguns minutos.", status_code=429)
+            if e.motivo == "sem_2fa":
+                return pagina_login(request, email, "Sua conta ainda nao tem 2FA configurado. Fale com o administrador.",
+                                    status_code=403)
+            # Generico: nao revela se o e-mail existe nem se o codigo ou a senha falhou.
+            return pagina_login(request, email, "E-mail, senha ou codigo incorretos.", pede_2fa=bool(codigo.strip()),
+                                status_code=401)
+        except ApiIndisponivel:
+            raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+        resp = RedirectResponse("/painel", status_code=303)
+        resp.set_cookie(
+            COOKIE_EQUIPE, sessao.token, max_age=max(sessao.expira_em - int(time.time()), 0),
+            httponly=True, samesite="lax", secure=request.url.scheme == "https", path="/",
+        )
+        return resp
+
+    @app.post("/sair")
+    def sair():
+        resp = RedirectResponse("/login" if portal_api is not None else "/", status_code=303)
+        resp.delete_cookie(COOKIE_EQUIPE, path="/")
+        return resp
+
+    def sessao_equipe(request: Request) -> str | None:
+        return request.cookies.get(COOKIE_EQUIPE)
+
     @app.get("/painel", response_class=HTMLResponse)
     def painel(request: Request):
-        # Sem autenticacao ainda: so existe em modo demo. Em producao exige login + 2FA (modulo 01).
         if not cfg.demo_mode:
-            raise HTTPException(404)
+            if portal_api is None or not sessao_equipe(request):
+                return RedirectResponse("/login", status_code=303)
+            return render(request, "painel_api.html")  # a fila real entra na proxima etapa
         colunas = {s: [] for s in STATUSES}
         for c in gw.listar_chamados():
             colunas[c.status].append(c)

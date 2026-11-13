@@ -57,9 +57,10 @@ def test_rate_limit_na_candidatura():
     assert codes == [303, 303, 429]
 
 
-def test_painel_so_em_modo_demo():
+def test_painel_exige_login_fora_do_modo_demo():
     assert make(demo=True).get("/painel").status_code == 200
-    assert make(demo=False).get("/painel").status_code == 404
+    r = make(demo=False).get("/painel")
+    assert r.status_code == 303 and r.headers["location"] == "/login"
 
 
 def test_validacao_htmx_do_cpf():
