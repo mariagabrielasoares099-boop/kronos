@@ -44,7 +44,9 @@ Atenção ao custo zero: armazenamento em disco local (ou MinIO no compose), atr
 - [x] Checklist mockado para os chamados de qualquer vaga (RG, CPF, comprovante de residência), devolvido por `GET /chamados/:id/documentos`; a mesma lista fixa vale para todas as vagas no M1
 - [x] Rate limit já global (Throttler); testes de tipo inválido, arquivo grande e acesso entre tenants
 
-**Pendência de integração:** a API de documentos está implementada na branch `feat/documentos-upload`, mas o portal ainda não tem formulário de upload nem integração com esses endpoints. A etapa 2 ainda não satisfaz o critério ponta a ponta abaixo. Os testes HTTP/RLS exigem `TEST_ADMIN_DATABASE_URL` e `TEST_APP_DATABASE_URL`; sem elas, são pulados.
+**Integração com o portal (branch `feat/portal-api`):** o portal tem o formulário de upload em `/chamado/{protocolo}` e, fora do modo demo, usa a API real. O candidato entra por um link de uso único enviado ao e-mail cadastrado (`POST /portal/link` e `POST /portal/sessao`, ver `docs/API.md`) e o upload vai com o token dele. O teste HTTP/RLS `portal.http.spec.ts` cobre entrar, enviar, ver o documento na listagem, achar o arquivo no storage e baixar o mesmo conteúdo, e confere que outro candidato e outro tenant recebem 404. Os testes HTTP/RLS exigem `TEST_ADMIN_DATABASE_URL` e `TEST_APP_DATABASE_URL`; sem elas, são pulados (o CI roda com um Postgres descartável).
+
+**Ainda fora do portal real:** vagas, candidatura e painel do RH continuam no modo demo, e a candidatura fora do demo responde 503. Por isso o chamado precisa ser aberto pela equipe (`POST /chamados`) para o candidato receber o link. O envio de e-mail em produção depende de escolher um provedor SMTP.
 
 **Pronto quando:** upload pelo portal (`/chamado/{protocolo}` no web) aparece na API e nenhum outro tenant consegue ler o arquivo.
 
