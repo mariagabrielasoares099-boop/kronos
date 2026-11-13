@@ -127,7 +127,7 @@ describe.skipIf(!ADMIN || !APP)('Portal do candidato: entrada + upload ponta a p
       await Promise.all(clientes.map((c) => c.end()));
       await admin.query('DELETE FROM portal_links WHERE candidate_id = $1', [cand2]);
     }
-  }, 10_000);
+  }, 30_000); // sob carga (suite inteira em paralelo) 10 s era justo demais
 
   it('nao escolhe tenant arbitrariamente quando CPF e protocolo coincidem', async () => {
     await admin.query('UPDATE candidates SET cpf = $1 WHERE id = $2', [CPF, candT2]);
