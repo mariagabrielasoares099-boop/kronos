@@ -11,6 +11,7 @@
       {% if item.doc and item.doc.status == 'RECUSADO' %}<p class="muted">Motivo: {{ item.doc.motivo }}</p>{% endif %}
       {% if item.doc and item.doc.status == 'PENDENTE' %}
       <form class="decisao" hx-post="/painel/documentos/{{ item.doc.id }}/decisao" hx-target="#docs" hx-swap="outerHTML">
+        <input type="hidden" name="protocolo" value="{{ chamado.protocolo }}">
         <input name="motivo" maxlength="500" placeholder="Motivo (obrigatorio para recusar)" aria-label="Motivo da recusa">
         <button name="acao" value="aprovar" class="btn-ok">Aprovar</button>
         <button name="acao" value="recusar" class="btn-err">Recusar</button>

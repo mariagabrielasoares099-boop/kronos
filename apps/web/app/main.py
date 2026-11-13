@@ -1,5 +1,6 @@
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -8,7 +9,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .api_client import ApiClient, ApiIndisponivel, LoginRecusado
+from .api_client import (
+    ApiClient, ApiIndisponivel, Conflito, LoginRecusado, SemPermissao, SessaoExpirada,
+)
 from .arquivos import TAMANHO_MAXIMO_BYTES, ArquivoInvalido, validar_arquivo
 from .config import Settings, load_settings
 from .fila import filtrar, sla_situacao
@@ -22,6 +25,7 @@ from .validators import is_valid_cpf, is_valid_email, only_digits
 BASE = Path(__file__).parent
 COOKIE_SESSAO = "kronos_portal"
 COOKIE_EQUIPE = "kronos_equipe"
+DOC_ID_RE = re.compile(r"^[0-9a-fA-F-]{36}$")
 PROTOCOLO_RE = re.compile(r"^ADM-\d{4}-\d{6}$")
 CODIGO_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")  # 32 bytes em base64url (formato do codigo emitido pela API)
 SLA_LABELS = {"atrasado": "Atrasado", "vencendo": "Vence em 24h", "no_prazo": "No prazo", "sem_sla": "-"}
@@ -314,72 +318,149 @@ def create_app(
     def sessao_equipe(request: Request) -> str | None:
         return request.cookies.get(COOKIE_EQUIPE)
 
+    # --- Painel do RH: demo (em memoria) ou API real (sessao da equipe) ---
+    class _Login(Exception):
+        """Sem sessao valida da equipe: vira redirecionamento para /login."""
+
+    @app.exception_handler(_Login)
+    def _para_login(request: Request, exc: _Login):
+        if request.headers.get("hx-request"):  # HTMX nao segue 303 para a pagina inteira: manda o navegador la
+            resp = HTMLResponse(status_code=200, headers={"HX-Redirect": "/login"})
+        else:
+            resp = RedirectResponse("/login", status_code=303)
+        resp.delete_cookie(COOKIE_EQUIPE, path="/")
+        return resp
+
+    def token_equipe(request: Request) -> str | None:
+        """Demo: sem token (nao ha login). API: exige o cookie da equipe, senao vai para /login."""
+        if cfg.demo_mode:
+            return None
+        token = sessao_equipe(request)
+        if portal_api is None or not token:
+            raise _Login()
+        return token
+
+    def chamar_equipe(fn, *args):
+        """Chama a API como a equipe; 401 = sessao vencida, 403 = papel sem permissao, 502 = API fora."""
+        try:
+            return fn(*args)
+        except SessaoExpirada:
+            raise _Login()
+        except SemPermissao:
+            raise HTTPException(403, "Seu papel nao permite esta acao.")
+        except ApiIndisponivel:
+            raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+
+    def chamado_de_api(dados: dict) -> Chamado:
+        r = dados["resumo"]
+        prazo = datetime.fromisoformat(r["prazoSla"].replace("Z", "+00:00")) if r.get("prazoSla") else None
+        historico = [(e["para"], e["motivo"] or "") for e in dados.get("eventos", []) if e.get("para")]
+        docs = [Documento(d["id"], d["tipo"], "", d["status"], d.get("motivo")) for d in dados.get("documentos", [])]
+        return Chamado(r["protocolo"], "", r.get("candidatoNome") or "-", r["status"], historico,
+                       r.get("responsavelNome"), prazo, docs)
+
     @app.get("/painel", response_class=HTMLResponse)
     def painel(request: Request):
         if not cfg.demo_mode:
-            if portal_api is None or not sessao_equipe(request):
-                return RedirectResponse("/login", status_code=303)
-            return render(request, "painel_api.html")  # a fila real entra na proxima etapa
+            token_equipe(request)
+            return RedirectResponse("/painel/fila", status_code=303)
         colunas = {s: [] for s in STATUSES}
         for c in gw.listar_chamados():
             colunas[c.status].append(c)
         return render(request, "painel.html", colunas=colunas)
 
-    def montar_fila(status: str, busca: str) -> dict:
+    def montar_fila(request: Request, status: str, busca: str) -> dict:
         if status and status not in STATUS_LABELS:
             raise HTTPException(422, "Status invalido")
-        itens = filtrar(gw.listar_chamados(), status, busca)
+        token = token_equipe(request)
+        if token is None:
+            itens = filtrar(gw.listar_chamados(), status, busca)
+        else:  # a API ja filtra e ordena por SLA (e o RLS decide o que a pessoa enxerga)
+            linhas = chamar_equipe(portal_api.equipe_listar, token, status, busca)
+            itens = [chamado_de_api({"resumo": r}) for r in linhas]
         return {"linhas": [(c, sla_situacao(c)) for c in itens], "sla_labels": SLA_LABELS,
                 "status": status, "busca": busca}
 
     @app.get("/painel/fila", response_class=HTMLResponse)
     def fila(request: Request, status: str = Query("", max_length=30), busca: str = Query("", max_length=60)):
-        if not cfg.demo_mode:  # mesma regra do /painel ate existir login + 2FA
-            raise HTTPException(404)
-        return render(request, "fila.html", **montar_fila(status, busca))
+        return render(request, "fila.html", **montar_fila(request, status, busca))
 
     @app.get("/painel/fila/tabela", response_class=HTMLResponse)
     def fila_tabela(request: Request, status: str = Query("", max_length=30), busca: str = Query("", max_length=60)):
-        if not cfg.demo_mode:
-            raise HTTPException(404)
-        return render(request, "_fila_tabela.html", **montar_fila(status, busca))
-
-    def so_demo() -> None:  # mesma regra do /painel ate existir login + 2FA
-        if not cfg.demo_mode:
-            raise HTTPException(404)
+        return render(request, "_fila_tabela.html", **montar_fila(request, status, busca))
 
     def render_docs(request: Request, c, erro: str | None = None):
         return render(request, "_docs_rh.html", chamado=c, checklist=checklist_de(c), erro=erro)
 
-    @app.get("/painel/chamado/{protocolo}", response_class=HTMLResponse)
-    def painel_chamado(request: Request, protocolo: str):
-        so_demo()
-        c = gw.obter_chamado(protocolo)
+    def carregar_chamado(token: str | None, protocolo: str) -> Chamado:
+        if token is None:
+            c = gw.obter_chamado(protocolo)
+        else:
+            if not PROTOCOLO_RE.match(protocolo):
+                raise HTTPException(404)
+            dados = chamar_equipe(portal_api.equipe_chamado, protocolo, token)
+            c = chamado_de_api(dados) if dados else None
         if not c:
             raise HTTPException(404)
-        return render(request, "painel_chamado.html", chamado=c, vaga=gw.obter_vaga(c.vaga_id), checklist=checklist_de(c),
+        return c
+
+    @app.get("/painel/chamado/{protocolo}", response_class=HTMLResponse)
+    def painel_chamado(request: Request, protocolo: str):
+        token = token_equipe(request)
+        c = carregar_chamado(token, protocolo)
+        vaga = gw.obter_vaga(c.vaga_id) if token is None else None
+        return render(request, "painel_chamado.html", chamado=c, vaga=vaga, checklist=checklist_de(c),
                       erro=None, acao=ACAO_AVANCAR.get(c.status), sla=sla_situacao(c), sla_labels=SLA_LABELS)
 
     @app.post("/painel/documentos/{doc_id}/decisao", response_class=HTMLResponse)
-    def decidir_documento(request: Request, doc_id: str, acao: str = Form("", max_length=10), motivo: str = Form("", max_length=500)):
-        so_demo()
-        achado = gw.obter_documento(doc_id)
-        if not achado:
-            raise HTTPException(404)
-        c, d = achado
+    def decidir_documento(request: Request, doc_id: str, acao: str = Form("", max_length=10),
+                          motivo: str = Form("", max_length=500), protocolo: str = Form("", max_length=20)):
+        token = token_equipe(request)
         if acao not in ("aprovar", "recusar"):
             raise HTTPException(422, "Acao invalida")
+        if token is None:
+            achado = gw.obter_documento(doc_id)
+            if not achado:
+                raise HTTPException(404)
+            c, _ = achado
+        else:
+            if not DOC_ID_RE.match(doc_id):
+                raise HTTPException(404)
+            c = carregar_chamado(token, protocolo)
+            if not any(d.id == doc_id for d in c.documentos):
+                raise HTTPException(404)  # o documento tem de ser deste chamado
         if acao == "recusar" and len(motivo.strip()) < 3:
             return render_docs(request, c, "Informe o motivo da recusa (minimo 3 caracteres).")
-        if gw.decidir_documento(doc_id, acao == "aprovar", motivo) is None:
-            return render_docs(request, c, "Este documento ja foi decidido.")
-        return render_docs(request, c)
+        if token is None:
+            if gw.decidir_documento(doc_id, acao == "aprovar", motivo) is None:
+                return render_docs(request, c, "Este documento ja foi decidido.")
+            return render_docs(request, c)
+        erro = None
+        try:
+            if not chamar_equipe(portal_api.decidir_documento, doc_id, acao == "aprovar", motivo, token):
+                raise HTTPException(404)
+        except Conflito:
+            erro = "Este documento ja foi decidido."
+        return render_docs(request, carregar_chamado(token, protocolo), erro)  # estado novo vem da API
 
     @app.post("/painel/chamado/{protocolo}/avancar")
-    def avancar(protocolo: str):
-        so_demo()
-        if gw.avancar(protocolo) is None:
-            raise HTTPException(409, "Este chamado nao pode avancar")
+    def avancar(request: Request, protocolo: str):
+        token = token_equipe(request)
+        if token is None:
+            if gw.avancar(protocolo) is None:
+                raise HTTPException(409, "Este chamado nao pode avancar")
+        else:
+            if not PROTOCOLO_RE.match(protocolo):
+                raise HTTPException(404)
+            dados = chamar_equipe(portal_api.equipe_chamado, protocolo, token)
+            if not dados:
+                raise HTTPException(404)
+            try:
+                ok = chamar_equipe(portal_api.avancar, dados["resumo"]["id"], token)
+            except Conflito:
+                raise HTTPException(409, "Este chamado nao pode avancar")
+            if not ok:
+                raise HTTPException(404)
         return RedirectResponse(f"/painel/chamado/{protocolo}", status_code=303)
 
     return app

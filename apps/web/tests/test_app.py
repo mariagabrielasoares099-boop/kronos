@@ -176,7 +176,7 @@ def test_filtrar_por_status_e_busca_e_ordena_por_urgencia():
     assert filtrar([a, b, c], busca="000003") == [c]
 
 
-def test_fila_lista_filtra_e_so_existe_em_demo():
+def test_fila_lista_filtra_e_exige_login_fora_do_demo():
     c = make()
     page = c.get("/painel/fila")
     assert page.status_code == 200 and "Ana Souza" in page.text and "Atrasado" in page.text
@@ -184,8 +184,9 @@ def test_fila_lista_filtra_e_so_existe_em_demo():
     assert "Bruno Lima" in frag.text and "Ana Souza" not in frag.text
     assert "<html" not in frag.text  # fragmento HTMX, sem layout
     assert "Nenhum chamado" in c.get("/painel/fila/tabela", params={"busca": "zzz"}).text
-    assert make(demo=False).get("/painel/fila").status_code == 404
-    assert make(demo=False).get("/painel/fila/tabela").status_code == 404
+    for rota in ("/painel/fila", "/painel/fila/tabela"):
+        r = make(demo=False).get(rota)
+        assert r.status_code == 303 and r.headers["location"] == "/login"
 
 
 def test_fila_rejeita_status_invalido_e_escapa_busca():
@@ -281,8 +282,11 @@ def test_avancar_percorre_o_fluxo_ate_admitido():
     assert c.post(f"/painel/chamado/{p}/avancar").status_code == 409
 
 
-def test_rotas_do_rh_somem_fora_do_modo_demo():
+def test_rotas_do_rh_exigem_login_fora_do_modo_demo():
     c = make(demo=False)
-    assert c.get("/painel/chamado/ADM-2026-000001").status_code == 404
-    assert c.post("/painel/documentos/d1/decisao", data={"acao": "aprovar"}).status_code == 404
-    assert c.post("/painel/chamado/ADM-2026-000001/avancar").status_code == 404
+    for r in (
+        c.get("/painel/chamado/ADM-2026-000001"),
+        c.post("/painel/documentos/d1/decisao", data={"acao": "aprovar"}),
+        c.post("/painel/chamado/ADM-2026-000001/avancar"),
+    ):
+        assert r.status_code == 303 and r.headers["location"] == "/login"

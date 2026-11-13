@@ -21,6 +21,18 @@ class Sessao:
     expira_em: int  # epoch em segundos
 
 
+class SessaoExpirada(Exception):
+    """A API recusou o token da equipe (401): o portal manda para o login."""
+
+
+class SemPermissao(Exception):
+    """A API respondeu 403: o papel da pessoa nao permite a acao."""
+
+
+class Conflito(Exception):
+    """A API respondeu 409: o estado mudou (documento ja decidido, transicao nao permitida)."""
+
+
 @dataclass(frozen=True)
 class SessaoEquipe:
     token: str
@@ -126,3 +138,53 @@ class ApiClient:
         if r.status_code == 400:
             raise ArquivoInvalido("A API recusou o arquivo. Envie JPG, PNG ou PDF.")
         raise ApiIndisponivel()
+
+    # --- Equipe (fila, detalhe e decisoes). O token e o da pessoa; quem autoriza e a API. ---
+    def _equipe(self, metodo: str, caminho: str, token: str, **kw) -> httpx.Response:
+        r = self._chamar(metodo, caminho, headers=_bearer(token), **kw)
+        if r.status_code == 401:
+            raise SessaoExpirada()
+        if r.status_code == 403:
+            raise SemPermissao()
+        if r.status_code == 409:
+            raise Conflito()
+        return r
+
+    def equipe_listar(self, token: str, status: str = "", busca: str = "") -> list[dict]:
+        params = {k: v for k, v in {"status": status, "busca": busca.strip()}.items() if v}
+        r = self._equipe("GET", "/chamados", token, params=params)
+        if r.status_code != 200:
+            raise ApiIndisponivel()
+        return r.json()
+
+    def equipe_chamado(self, protocolo: str, token: str) -> dict | None:
+        """Resumo + linha do tempo + documentos. None quando nao existe ou a pessoa nao pode ve-lo."""
+        r = self._equipe("GET", f"/chamados/{protocolo}/resumo", token)
+        if r.status_code == 404:
+            return None
+        if r.status_code != 200:
+            raise ApiIndisponivel()
+        resumo = r.json()
+        ev = self._equipe("GET", f"/chamados/{resumo['id']}/eventos", token)
+        dc = self._equipe("GET", f"/chamados/{resumo['id']}/documentos", token)
+        if ev.status_code != 200 or dc.status_code != 200:
+            raise ApiIndisponivel()
+        return {"resumo": resumo, "eventos": ev.json(), "documentos": dc.json().get("documentos", [])}
+
+    def decidir_documento(self, doc_id: str, aprovar: bool, motivo: str, token: str) -> bool:
+        """True quando gravado; False se o documento nao existe/nao e visivel. Conflito se ja decidido."""
+        corpo = {"status": "APROVADO"} if aprovar else {"status": "RECUSADO", "motivo": motivo.strip()}
+        r = self._equipe("PATCH", f"/documentos/{doc_id}", token, json=corpo)
+        if r.status_code == 404:
+            return False
+        if r.status_code != 200:
+            raise ApiIndisponivel()
+        return True
+
+    def avancar(self, chamado_id: str, token: str) -> bool:
+        r = self._equipe("POST", f"/chamados/{chamado_id}/transicoes", token, json={"acao": "AVANCAR"})
+        if r.status_code == 404:
+            return False
+        if r.status_code != 200:
+            raise ApiIndisponivel()
+        return True

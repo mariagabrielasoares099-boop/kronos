@@ -14,19 +14,64 @@ CODIGO = "123456"
 TOKEN = "token.da.equipe"
 
 
+PROTOCOLO = "ADM-2026-000001"
+CHAMADO_ID = "0190d2a0-0000-7000-8000-000000000001"
+DOC_ID = "0190d2a0-0000-7000-8000-0000000000d1"
+RESUMO = {"id": CHAMADO_ID, "protocolo": PROTOCOLO, "status": "VALIDACAO_DP", "vagaTitulo": "Analista",
+          "candidatoNome": "Ana Souza", "responsavelNome": "Rita RH", "prazoSla": "2020-01-01T00:00:00.000Z",
+          "criadoEm": "2019-12-01T00:00:00.000Z"}
+
+
 class FakeApi:
     def __init__(self):
         self.chamadas: list[httpx.Request] = []
         self.exige_2fa = True
         self.bloqueada = False
         self.fora_do_ar = False
+        self.consultas: list[dict] = []
+        self.decisoes: list[dict] = []
+        self.transicoes: list[dict] = []
+        self.status_doc = "PENDENTE"
+        self.motivo_doc = None
+
+    def equipe(self, req: httpx.Request) -> httpx.Response:
+        """Rotas da API usadas pelo painel; exige o token da equipe como a API real."""
+        if req.headers.get("authorization") != f"Bearer {TOKEN}":
+            return httpx.Response(401)
+        path, m = req.url.path, req.method
+        if path == "/chamados" and m == "GET":
+            self.consultas.append(dict(req.url.params))
+            return httpx.Response(200, json=[RESUMO])
+        if path == f"/chamados/{PROTOCOLO}/resumo":
+            return httpx.Response(200, json=RESUMO)
+        if path == f"/chamados/{CHAMADO_ID}/eventos":
+            return httpx.Response(200, json=[
+                {"tipo": "CRIADO", "de": None, "para": "TRIAGEM", "motivo": None, "autorNome": "Rita RH",
+                 "em": "2019-12-01T00:00:00Z"},
+                {"tipo": "TRANSICAO", "de": "TRIAGEM", "para": "VALIDACAO_DP", "motivo": "ok", "autorNome": "Rita RH",
+                 "em": "2019-12-02T00:00:00Z"},
+            ])
+        if path == f"/chamados/{CHAMADO_ID}/documentos":
+            return httpx.Response(200, json={"documentos": [
+                {"id": DOC_ID, "tipo": "RG", "status": self.status_doc, "motivo": self.motivo_doc}], "checklist": []})
+        if path == f"/documentos/{DOC_ID}" and m == "PATCH":
+            corpo = json.loads(req.content)
+            self.decisoes.append(corpo)
+            if self.status_doc != "PENDENTE":
+                return httpx.Response(409)
+            self.status_doc, self.motivo_doc = corpo["status"], corpo.get("motivo")
+            return httpx.Response(200, json={})
+        if path == f"/chamados/{CHAMADO_ID}/transicoes" and m == "POST":
+            self.transicoes.append(json.loads(req.content))
+            return httpx.Response(200, json={})
+        return httpx.Response(404)
 
     def __call__(self, req: httpx.Request) -> httpx.Response:
         self.chamadas.append(req)
         if self.fora_do_ar:
             raise httpx.ConnectError("sem rede", request=req)
         if req.url.path != "/auth/login":
-            return httpx.Response(404)
+            return self.equipe(req)
         b = json.loads(req.content)
         if self.bloqueada:
             return httpx.Response(429)
@@ -63,7 +108,8 @@ def test_login_ok_grava_cookie_httponly_e_abre_o_painel():
     cookie = r.headers["set-cookie"].lower()
     assert "kronos_equipe=" in cookie and "httponly" in cookie and "samesite=lax" in cookie
     assert json.loads(fake.chamadas[0].content) == {"email": EMAIL, "senha": SENHA, "codigo": CODIGO}
-    assert c.get("/painel").status_code == 200
+    r = c.get("/painel")
+    assert r.status_code == 303 and r.headers["location"] == "/painel/fila"
 
 
 def test_sem_codigo_pede_o_2fa_sem_criar_sessao():
@@ -119,3 +165,66 @@ def test_no_demo_nao_existe_login():
     c = TestClient(create_app(Settings("http://api", True, "s" * 32, 10, 60)), follow_redirects=False)
     assert c.get("/login").status_code == 404
     assert c.post("/login", data={"email": EMAIL, "senha": SENHA}).status_code == 404
+
+
+# --- Fila, detalhe e decisoes pela API real ---------------------------------------
+def logado():
+    c, fake = make()
+    entrar(c)
+    return c, fake
+
+
+def test_fila_mostra_chamados_da_api_com_sla_e_repassa_filtros():
+    c, fake = logado()
+    r = c.get("/painel/fila", params={"status": "VALIDACAO_DP", "busca": " ana "})
+    assert r.status_code == 200 and "Ana Souza" in r.text and "Atrasado" in r.text and "Rita RH" in r.text
+    assert fake.consultas[-1] == {"status": "VALIDACAO_DP", "busca": "ana"}
+    assert f'href="/painel/chamado/{PROTOCOLO}"' in r.text
+    assert c.get("/painel/fila/tabela", params={"status": "HACK"}).status_code == 422
+
+
+def test_sessao_vencida_na_api_volta_ao_login_e_limpa_o_cookie():
+    c, _ = make()
+    c.cookies.set("kronos_equipe", "token.vencido", path="/")
+    r = c.get("/painel/fila")
+    assert r.status_code == 303 and r.headers["location"] == "/login" and "kronos_equipe" in r.headers["set-cookie"]
+    h = c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "aprovar", "protocolo": PROTOCOLO},
+               headers={"HX-Request": "true"})
+    assert h.status_code == 200 and h.headers["hx-redirect"] == "/login"  # HTMX nao segue 303 sozinho
+
+
+def test_detalhe_traz_documentos_e_linha_do_tempo_da_api():
+    c, _ = logado()
+    r = c.get(f"/painel/chamado/{PROTOCOLO}")
+    assert r.status_code == 200 and "Ana Souza" in r.text and "Aguardando decisao" in r.text
+    assert "Validar e seguir para assinatura" in r.text
+    assert c.get("/painel/chamado/ADM-2026-999999").status_code == 404
+    assert c.get("/painel/chamado/ABC").status_code == 404
+
+
+def test_aprovar_e_recusar_documento_gravam_na_api_e_recarregam_o_estado():
+    c, fake = logado()
+    r = c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "recusar", "motivo": "ab", "protocolo": PROTOCOLO})
+    assert "minimo 3 caracteres" in r.text and fake.decisoes == []  # nem chega a API
+    r = c.post(f"/painel/documentos/{DOC_ID}/decisao",
+               data={"acao": "recusar", "motivo": " Foto ilegivel ", "protocolo": PROTOCOLO})
+    assert fake.decisoes == [{"status": "RECUSADO", "motivo": "Foto ilegivel"}]
+    assert "Recusado" in r.text and "Foto ilegivel" in r.text
+    r = c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "aprovar", "protocolo": PROTOCOLO})
+    assert "ja foi decidido" in r.text  # a API respondeu 409
+
+
+def test_decisao_so_vale_para_documento_do_chamado_informado():
+    c, fake = logado()
+    outro = "0190d2a0-0000-7000-8000-0000000000ff"
+    assert c.post(f"/painel/documentos/{outro}/decisao", data={"acao": "aprovar", "protocolo": PROTOCOLO}).status_code == 404
+    assert c.post("/painel/documentos/x/decisao", data={"acao": "aprovar", "protocolo": PROTOCOLO}).status_code == 404
+    assert c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "hack", "protocolo": PROTOCOLO}).status_code == 422
+    assert fake.decisoes == []
+
+
+def test_avancar_chama_a_transicao_da_api():
+    c, fake = logado()
+    r = c.post(f"/painel/chamado/{PROTOCOLO}/avancar")
+    assert r.status_code == 303 and r.headers["location"] == f"/painel/chamado/{PROTOCOLO}"
+    assert fake.transicoes == [{"acao": "AVANCAR"}]
