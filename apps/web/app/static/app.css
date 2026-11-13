@@ -10,7 +10,7 @@ a { color:var(--brand-dark); }
 /* Estrutura */
 .app { display:flex; min-height:100vh; }
 .content { flex:1; min-width:0; display:flex; flex-direction:column; }
-main { flex:1; width:100%; max-width:1100px; margin:0 auto; padding:24px 20px; }
+main { flex:1; width:100%; max-width:1400px; margin:0 auto; padding:24px 20px; }
 .area-candidato main { max-width:860px; }
 footer { padding:16px 20px; color:var(--muted); font-size:13px; text-align:center; }
 
@@ -100,3 +100,15 @@ button:hover { background:var(--brand-dark); }
   .filtros input { min-width:0; width:100%; }
 }
 @media (prefers-reduced-motion: no-preference) { .ticket, .side nav a, button { transition: background .15s, border-color .15s; } }
+
+/* Master-detail da fila do RH: lista a esquerda, chamado a direita; empilha no celular. */
+.mestre-detalhe { display:grid; grid-template-columns:minmax(320px, 5fr) 7fr; gap:20px; align-items:start; }
+.mestre-detalhe .fila { font-size:13px; }
+.mestre-detalhe .fila a:focus { outline:2px solid var(--brand); outline-offset:2px; }
+.fila tbody tr:has(a:focus) { background:#e3f4f8; }
+.detalhe { background:var(--card); border:1px solid var(--line); box-shadow:var(--shadow); padding:16px 20px; min-height:200px; }
+.mestre-detalhe .detalhe { position:sticky; top:12px; max-height:calc(100vh - 24px); overflow-y:auto; }
+@media (max-width: 900px) {
+  .mestre-detalhe { grid-template-columns:1fr; }
+  .mestre-detalhe .detalhe { position:static; max-height:none; }
+}

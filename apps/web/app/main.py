@@ -404,13 +404,23 @@ def create_app(
             raise HTTPException(404)
         return c
 
+    def contexto_detalhe(token: str | None, c: Chamado, erro_acao: str | None = None) -> dict:
+        vaga = gw.obter_vaga(c.vaga_id) if token is None else None
+        return dict(chamado=c, vaga=vaga, checklist=checklist_de(c), erro=None, erro_acao=erro_acao,
+                    acao=ACAO_AVANCAR.get(c.status), sla=sla_situacao(c), sla_labels=SLA_LABELS)
+
     @app.get("/painel/chamado/{protocolo}", response_class=HTMLResponse)
     def painel_chamado(request: Request, protocolo: str):
         token = token_equipe(request)
         c = carregar_chamado(token, protocolo)
-        vaga = gw.obter_vaga(c.vaga_id) if token is None else None
-        return render(request, "painel_chamado.html", chamado=c, vaga=vaga, checklist=checklist_de(c),
-                      erro=None, acao=ACAO_AVANCAR.get(c.status), sla=sla_situacao(c), sla_labels=SLA_LABELS)
+        return render(request, "painel_chamado.html", **contexto_detalhe(token, c))
+
+    @app.get("/painel/chamado/{protocolo}/detalhe", response_class=HTMLResponse)
+    def painel_detalhe(request: Request, protocolo: str):
+        """Fragmento do lado direito do master-detail (HTMX)."""
+        token = token_equipe(request)
+        c = carregar_chamado(token, protocolo)
+        return render(request, "_detalhe.html", **contexto_detalhe(token, c))
 
     @app.post("/painel/documentos/{doc_id}/decisao", response_class=HTMLResponse)
     def decidir_documento(request: Request, doc_id: str, acao: str = Form("", max_length=10),
@@ -443,12 +453,14 @@ def create_app(
             erro = "Este documento ja foi decidido."
         return render_docs(request, carregar_chamado(token, protocolo), erro)  # estado novo vem da API
 
-    @app.post("/painel/chamado/{protocolo}/avancar")
+    @app.post("/painel/chamado/{protocolo}/avancar", response_class=HTMLResponse)
     def avancar(request: Request, protocolo: str):
         token = token_equipe(request)
+        htmx = bool(request.headers.get("hx-request"))
+        erro = None
         if token is None:
             if gw.avancar(protocolo) is None:
-                raise HTTPException(409, "Este chamado nao pode avancar")
+                erro = "Este chamado nao pode avancar."
         else:
             if not PROTOCOLO_RE.match(protocolo):
                 raise HTTPException(404)
@@ -456,12 +468,18 @@ def create_app(
             if not dados:
                 raise HTTPException(404)
             try:
-                ok = chamar_equipe(portal_api.avancar, dados["resumo"]["id"], token)
+                if not chamar_equipe(portal_api.avancar, dados["resumo"]["id"], token):
+                    raise HTTPException(404)
             except Conflito:
-                raise HTTPException(409, "Este chamado nao pode avancar")
-            if not ok:
-                raise HTTPException(404)
-        return RedirectResponse(f"/painel/chamado/{protocolo}", status_code=303)
+                erro = "Este chamado nao pode avancar."
+        if not htmx:
+            if erro:
+                raise HTTPException(409, erro)
+            return RedirectResponse(f"/painel/chamado/{protocolo}", status_code=303)
+        c = carregar_chamado(token, protocolo)  # estado novo vem da API (ou do demo)
+        resp = render(request, "_detalhe.html", **contexto_detalhe(token, c, erro))
+        resp.headers["HX-Trigger"] = "atualizarFila"  # a linha da fila mostra o status novo
+        return resp
 
     return app
 

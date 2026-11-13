@@ -228,3 +228,13 @@ def test_avancar_chama_a_transicao_da_api():
     r = c.post(f"/painel/chamado/{PROTOCOLO}/avancar")
     assert r.status_code == 303 and r.headers["location"] == f"/painel/chamado/{PROTOCOLO}"
     assert fake.transicoes == [{"acao": "AVANCAR"}]
+
+
+def test_master_detail_pela_api_fragmento_e_avancar_via_htmx():
+    c, fake = logado()
+    frag = c.get(f"/painel/chamado/{PROTOCOLO}/detalhe")
+    assert frag.status_code == 200 and "<html" not in frag.text and "Ana Souza" in frag.text
+    r = c.post(f"/painel/chamado/{PROTOCOLO}/avancar", headers={"HX-Request": "true"})
+    assert r.status_code == 200 and r.headers["hx-trigger"] == "atualizarFila" and fake.transicoes == [{"acao": "AVANCAR"}]
+    c.cookies.clear()
+    assert c.get(f"/painel/chamado/{PROTOCOLO}/detalhe").status_code == 303

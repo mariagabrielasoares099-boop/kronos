@@ -1,0 +1,25 @@
+<header class="detalhe-topo">
+  <h2>{{ chamado.protocolo }} <small>{{ chamado.nome }}</small></h2>
+  <p class="muted">Vaga: {{ vaga.titulo if vaga else '-' }} &middot; Responsavel: {{ chamado.responsavel or '-' }}
+    {% if sla != 'sem_sla' %}&middot; <span class="sla sla-{{ sla }}">{{ sla_labels[sla] }}</span>{% endif %}</p>
+  <p class="status">Situacao: <strong>{{ labels[chamado.status] }}</strong></p>
+</header>
+
+{% include "_docs_rh.html" %}
+
+<div class="acoes">
+  {% if erro_acao %}<p class="alerta" role="alert">{{ erro_acao }}</p>{% endif %}
+  {% if acao %}
+  <form method="post" action="/painel/chamado/{{ chamado.protocolo }}/avancar"
+        hx-post="/painel/chamado/{{ chamado.protocolo }}/avancar" hx-target="#detalhe" hx-swap="innerHTML">
+    <button>{{ acao }}</button>
+  </form>
+  {% else %}<p class="muted">Chamado encerrado.</p>{% endif %}
+</div>
+
+<h3>Linha do tempo</h3>
+<ol class="timeline">
+  {% for st, motivo in chamado.historico %}
+  <li><strong>{{ labels[st] }}</strong> &mdash; {{ motivo }}</li>
+  {% endfor %}
+</ol>

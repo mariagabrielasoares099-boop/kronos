@@ -290,3 +290,15 @@ def test_rotas_do_rh_exigem_login_fora_do_modo_demo():
         c.post("/painel/chamado/ADM-2026-000001/avancar"),
     ):
         assert r.status_code == 303 and r.headers["location"] == "/login"
+
+def test_master_detail_demo_fragmento_e_avancar_via_htmx():
+    c = make()
+    fila = c.get("/painel/fila").text
+    assert "mestre-detalhe" in fila and "Selecione um chamado" in fila
+    assert "/painel/chamado/ADM-2026-000001/detalhe" in fila and "hx-target=\"#detalhe\"" in fila
+    frag = c.get("/painel/chamado/ADM-2026-000001/detalhe")
+    assert frag.status_code == 200 and "<html" not in frag.text and "Linha do tempo" in frag.text
+    assert c.get("/painel/chamado/ADM-2026-999999/detalhe").status_code == 404
+    r = c.post("/painel/chamado/ADM-2026-000001/avancar", headers={"HX-Request": "true"})
+    assert r.status_code == 200 and r.headers["hx-trigger"] == "atualizarFila" and "<html" not in r.text
+    assert "Assinatura" in r.text  # estado novo no proprio fragmento

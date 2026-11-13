@@ -6,7 +6,7 @@
   <tbody>
     {% for c, sla in linhas %}
     <tr>
-      <td><a href="/painel/chamado/{{ c.protocolo }}">{{ c.protocolo }}</a></td>
+      <td><a href="/painel/chamado/{{ c.protocolo }}" hx-get="/painel/chamado/{{ c.protocolo }}/detalhe" hx-target="#detalhe" hx-swap="innerHTML">{{ c.protocolo }}</a></td>
       <td>{{ c.nome }}</td>
       <td>{{ labels[c.status] }}</td>
       <td>{{ c.responsavel or '-' }}</td>
