@@ -9,6 +9,7 @@ import { DbModule } from './db/db.module.js';
 import { DocumentosModule } from './documentos/documentos.module.js';
 import { DocsController } from './docs/docs.controller.js';
 import { HealthController } from './health/health.controller.js';
+import { PortalModule } from './portal/portal.module.js';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { HealthController } from './health/health.controller.js';
     ]),
     ChamadosModule,
     DocumentosModule,
+    PortalModule,
   ],
   controllers: [HealthController, DocsController],
   providers: [

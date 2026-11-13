@@ -68,6 +68,14 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
     this.log.log(`RLS ativo para o papel "${row.papel}"`);
   }
 
+  /**
+   * Transacao SEM contexto de tenant. Uso exclusivo da autenticacao (funcoes auth_*, SECURITY DEFINER):
+   * ainda nao se sabe quem e o usuario. Consulta a tabela de negocio aqui retorna zero linhas (RLS).
+   */
+  runSemContexto<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    return this.client.$transaction(fn, OPCOES_TRANSACAO);
+  }
+
   /** Executa `fn` numa transacao com o contexto de acesso informado. */
   async run<T>(ctx: unknown, fn: (tx: Tx) => Promise<T>): Promise<T> {
     const validado = parseContext(ctx);
