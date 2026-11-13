@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -25,6 +25,7 @@ from .validators import is_valid_cpf, is_valid_email, only_digits
 BASE = Path(__file__).parent
 COOKIE_SESSAO = "kronos_portal"
 COOKIE_EQUIPE = "kronos_equipe"
+TIPOS_ARQUIVO = {"image/jpeg", "image/png", "application/pdf"}
 DOC_ID_RE = re.compile(r"^[0-9a-fA-F-]{36}$")
 PROTOCOLO_RE = re.compile(r"^ADM-\d{4}-\d{6}$")
 CODIGO_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")  # 32 bytes em base64url (formato do codigo emitido pela API)
@@ -46,7 +47,7 @@ def create_app(
     app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
     def render(request: Request, name: str, status_code: int = 200, **ctx) -> HTMLResponse:
-        ctx.update(demo=cfg.demo_mode, labels=STATUS_LABELS, tipos=TIPOS_DOCUMENTO)
+        ctx.update(demo=cfg.demo_mode, api=portal_api is not None and not cfg.demo_mode, labels=STATUS_LABELS, tipos=TIPOS_DOCUMENTO)
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
     @app.get("/health")
@@ -452,6 +453,27 @@ def create_app(
         except Conflito:
             erro = "Este documento ja foi decidido."
         return render_docs(request, carregar_chamado(token, protocolo), erro)  # estado novo vem da API
+
+    @app.get("/painel/chamado/{protocolo}/documentos/{doc_id}/arquivo")
+    def ver_documento(request: Request, protocolo: str, doc_id: str):
+        """Baixa o arquivo pela API com o token da pessoa (sem URL publica). So existe com API real."""
+        token = token_equipe(request)
+        if token is None or not DOC_ID_RE.match(doc_id):
+            raise HTTPException(404)
+        c = carregar_chamado(token, protocolo)
+        if not any(d.id == doc_id for d in c.documentos):
+            raise HTTPException(404)  # o documento tem de ser deste chamado
+        achado = chamar_equipe(portal_api.baixar_documento, doc_id, token)
+        if achado is None:
+            raise HTTPException(404)
+        mime, conteudo = achado
+        if mime not in TIPOS_ARQUIVO:  # nunca repassa um tipo que o portal nao conhece
+            mime = "application/octet-stream"
+        return Response(conteudo, media_type=mime, headers={
+            "Content-Disposition": 'attachment; filename="documento"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        })
 
     @app.post("/painel/chamado/{protocolo}/avancar", response_class=HTMLResponse)
     def avancar(request: Request, protocolo: str):

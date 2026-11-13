@@ -54,6 +54,8 @@ class FakeApi:
         if path == f"/chamados/{CHAMADO_ID}/documentos":
             return httpx.Response(200, json={"documentos": [
                 {"id": DOC_ID, "tipo": "RG", "status": self.status_doc, "motivo": self.motivo_doc}], "checklist": []})
+        if path == f"/documentos/{DOC_ID}/arquivo":
+            return httpx.Response(200, content=b"%PDF-1.7 fake", headers={"content-type": "application/pdf"})
         if path == f"/documentos/{DOC_ID}" and m == "PATCH":
             corpo = json.loads(req.content)
             self.decisoes.append(corpo)
@@ -238,3 +240,18 @@ def test_master_detail_pela_api_fragmento_e_avancar_via_htmx():
     assert r.status_code == 200 and r.headers["hx-trigger"] == "atualizarFila" and fake.transicoes == [{"acao": "AVANCAR"}]
     c.cookies.clear()
     assert c.get(f"/painel/chamado/{PROTOCOLO}/detalhe").status_code == 303
+
+
+def test_ver_documento_baixa_pela_api_como_anexo_e_so_do_proprio_chamado():
+    c, fake = logado()
+    page = c.get(f"/painel/chamado/{PROTOCOLO}")
+    assert f"/painel/chamado/{PROTOCOLO}/documentos/{DOC_ID}/arquivo" in page.text
+    r = c.get(f"/painel/chamado/{PROTOCOLO}/documentos/{DOC_ID}/arquivo")
+    assert r.status_code == 200 and r.content == b"%PDF-1.7 fake" and r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"].startswith("attachment") and r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["cache-control"] == "private, no-store"
+    outro = "0190d2a0-0000-7000-8000-0000000000ff"
+    assert c.get(f"/painel/chamado/{PROTOCOLO}/documentos/{outro}/arquivo").status_code == 404
+    assert c.get(f"/painel/chamado/{PROTOCOLO}/documentos/x/arquivo").status_code == 404
+    c.cookies.clear()
+    assert c.get(f"/painel/chamado/{PROTOCOLO}/documentos/{DOC_ID}/arquivo").status_code == 303

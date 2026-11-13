@@ -188,3 +188,12 @@ class ApiClient:
         if r.status_code != 200:
             raise ApiIndisponivel()
         return True
+
+    def baixar_documento(self, doc_id: str, token: str) -> tuple[str, bytes] | None:
+        """(mime, conteudo) do arquivo; None quando nao existe ou a pessoa nao pode ve-lo."""
+        r = self._equipe("GET", f"/documentos/{doc_id}/arquivo", token)
+        if r.status_code == 404:
+            return None
+        if r.status_code != 200:
+            raise ApiIndisponivel()
+        return r.headers.get("content-type", "application/octet-stream"), r.content
