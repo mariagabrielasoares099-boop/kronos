@@ -27,3 +27,6 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 .aider*
+
+# Armazenamento local de documentos (StoragePort em disco)
+apps/api/storage/

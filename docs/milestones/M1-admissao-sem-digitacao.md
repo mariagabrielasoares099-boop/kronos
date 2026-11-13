@@ -22,13 +22,13 @@ Dependências: 1 → 2 → 3 → 4. A etapa 1 destrava todas; 3 pode começar em
 
 Já existe: `ticket-status.ts` (10 status, retornos), `protocol.ts`, `br-docs.ts`, modelos Prisma `Ticket`, `TicketEvent`, `Candidate`, migrações com RLS.
 
-- [ ] Agregado `Chamado` (id, protocolo, status, candidato, vaga, `erpRef`) com métodos `avancar()`, `devolver(motivo)`, `reprovar()` que usam a máquina de estados existente
-- [ ] Value objects: `Cpf`, `Protocolo`, `StatusChamado` (reaproveitar `br-docs.ts`/`protocol.ts`)
-- [ ] Entidade `Admissao` com dados no formato canônico (subconjunto do S-2200: nome, CPF, nascimento, endereço, cargo, salário, data de admissão)
-- [ ] Porta `ChamadoRepository` (interface) + adaptador Prisma, sempre dentro do contexto de tenant (RLS)
-- [ ] Todo evento de mudança grava em `ticket_events` (append-only)
-- [ ] Módulo Nest `ChamadosModule`: `POST /chamados`, `GET /chamados/:protocolo`, `POST /chamados/:id/transicoes`
-- [ ] Testes unitários das transições válidas e inválidas
+- [x] Agregado `Chamado` (id, protocolo, status, candidato, vaga, `erpRef`) com métodos `avancar()`, `devolver(motivo)`, `reprovar()` que usam a máquina de estados existente
+- [ ] Value objects `Cpf`, `Protocolo`, `StatusChamado`: `Cpf` implementado; protocolo e status usam funções/tipos de `protocol.ts`/`ticket-status.ts`, sem objetos dedicados
+- [x] Entidade `Admissao` com dados no formato canônico (subconjunto do S-2200: nome, CPF, nascimento, endereço, cargo, salário, data de admissão)
+- [x] Porta `ChamadoRepository` (interface) + adaptador Prisma, sempre dentro do contexto de tenant (RLS)
+- [x] Todo evento de mudança grava em `ticket_events` (append-only)
+- [x] Módulo Nest `ChamadosModule`: `POST /chamados`, `GET /chamados/:protocolo`, `POST /chamados/:id/transicoes`
+- [x] Testes unitários das transições válidas e inválidas
 
 **Pronto quando:** transições inválidas são rejeitadas por testes e cada transição aparece em `ticket_events`.
 
@@ -37,12 +37,14 @@ Já existe: `ticket-status.ts` (10 status, retornos), `protocol.ts`, `br-docs.ts
 
 Atenção ao custo zero: armazenamento em disco local (ou MinIO no compose), atrás de uma porta `StoragePort` para trocar depois.
 
-- [ ] Modelo `Document` (chamado, tipo, status `PENDENTE|APROVADO|RECUSADO`, motivo, caminho, hash, tamanho) + migração com RLS
-- [ ] `POST /chamados/:id/documentos` (multipart; limite de tamanho; só JPG/PNG/PDF conferindo o conteúdo, não só a extensão)
-- [ ] `GET /chamados/:id/documentos` e download autenticado (sem URL pública)
-- [ ] `PATCH /documentos/:id` aprovar/recusar com motivo (usado pela etapa 3)
-- [ ] Checklist por vaga mockado (RG, CPF, comprovante de residência)
-- [ ] Rate limit já global (Throttler); testes de tipo inválido, arquivo grande e acesso entre tenants
+- [x] Modelo `Document` (chamado, tipo, status `PENDENTE|APROVADO|RECUSADO`, motivo, caminho, hash, tamanho) + migração com RLS
+- [x] `POST /chamados/:id/documentos` (multipart; limite de tamanho; só JPG/PNG/PDF conferindo o conteúdo, não só a extensão)
+- [x] `GET /chamados/:id/documentos` e download autenticado (sem URL pública)
+- [x] `PATCH /documentos/:id` aprovar/recusar com motivo (usado pela etapa 3)
+- [x] Checklist mockado para os chamados de qualquer vaga (RG, CPF, comprovante de residência), devolvido por `GET /chamados/:id/documentos`; a mesma lista fixa vale para todas as vagas no M1
+- [x] Rate limit já global (Throttler); testes de tipo inválido, arquivo grande e acesso entre tenants
+
+**Pendência de integração:** a API de documentos está implementada na branch `feat/documentos-upload`, mas o portal ainda não tem formulário de upload nem integração com esses endpoints. A etapa 2 ainda não satisfaz o critério ponta a ponta abaixo. Os testes HTTP/RLS exigem `TEST_ADMIN_DATABASE_URL` e `TEST_APP_DATABASE_URL`; sem elas, são pulados.
 
 **Pronto quando:** upload pelo portal (`/chamado/{protocolo}` no web) aparece na API e nenhum outro tenant consegue ler o arquivo.
 
