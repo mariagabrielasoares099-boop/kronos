@@ -50,6 +50,10 @@ def create_app(
         ctx.update(demo=cfg.demo_mode, api=portal_api is not None and not cfg.demo_mode, labels=STATUS_LABELS, tipos=TIPOS_DOCUMENTO)
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return Response(status_code=204)
+
     @app.get("/health")
     def health():
         return {"status": "ok"}
@@ -359,7 +363,7 @@ def create_app(
         lista = dados.get("documentos")
         docs = [Documento(d["id"], d["tipo"], "", d["status"], d.get("motivo")) for d in lista or []]
         return Chamado(r["protocolo"], "", r.get("candidatoNome") or "-", r["status"], historico,
-                       r.get("responsavelNome"), prazo, docs, docs_indisponiveis="documentos" in dados and lista is None)
+                       r.get("responsavelNome"), prazo, docs, vaga_titulo=r.get("vagaTitulo"), docs_indisponiveis="documentos" in dados and lista is None)
 
     @app.get("/painel", response_class=HTMLResponse)
     def painel(request: Request):

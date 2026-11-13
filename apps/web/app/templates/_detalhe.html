@@ -1,6 +1,6 @@
 <header class="detalhe-topo">
   <h2>{{ chamado.protocolo }} <small>{{ chamado.nome }}</small></h2>
-  <p class="muted">Vaga: {{ vaga.titulo if vaga else '-' }} &middot; Responsavel: {{ chamado.responsavel or '-' }}
+  <p class="muted">Vaga: {{ vaga.titulo if vaga else (chamado.vaga_titulo or '-') }} &middot; Responsavel: {{ chamado.responsavel or '-' }}
     {% if sla != 'sem_sla' %}&middot; <span class="sla sla-{{ sla }}">{{ sla_labels[sla] }}</span>{% endif %}</p>
   <p class="status">Situacao: <strong>{{ labels[chamado.status] }}</strong></p>
 </header>

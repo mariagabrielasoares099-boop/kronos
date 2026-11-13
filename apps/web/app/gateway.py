@@ -71,6 +71,7 @@ class Chamado:
     responsavel: str | None = None
     prazo_sla: datetime | None = None
     documentos: list[Documento] = field(default_factory=list)
+    vaga_titulo: str | None = None  # API: titulo ja vem no resumo; o demo busca a vaga pelo gateway
     docs_indisponiveis: bool = False  # API: equipe sem atribuicao ao chamado nao ve os documentos
 
 

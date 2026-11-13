@@ -275,3 +275,9 @@ def test_layout_do_rh_com_login_real_tem_menu_sair_e_sem_nome_de_demonstracao():
     page = c.get("/painel/fila").text
     assert 'class="area-rh"' in page and 'action="/sair"' in page and "Diego" not in page
     assert "Portal de vagas" not in page and "includeIndicatorStyles" in page  # htmx sem estilo inline (CSP)
+
+
+def test_detalhe_mostra_o_titulo_da_vaga_da_api_e_favicon_nao_da_404():
+    c, _ = logado()
+    assert "Analista" in c.get(f"/painel/chamado/{PROTOCOLO}/detalhe").text
+    assert c.get("/favicon.ico").status_code == 204
