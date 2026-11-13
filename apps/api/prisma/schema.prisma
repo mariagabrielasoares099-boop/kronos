@@ -58,6 +58,9 @@ model User {
   role         String // CHECK em rls.sql
   passwordHash String   @map("password_hash")
   totpSecret   String?  @map("totp_secret") // criptografado em repouso
+  totpUltimoPasso BigInt?  @map("totp_ultimo_passo") // impede reuso do mesmo codigo TOTP
+  falhasLogin     Int      @default(0) @map("falhas_login")
+  bloqueadoAte    DateTime? @map("bloqueado_ate") @db.Timestamptz(3)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant      Tenant             @relation(fields: [tenantId], references: [id])
