@@ -100,6 +100,7 @@ model Candidate {
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id])
   tickets Ticket[]
+  portalLinks PortalLink[]
 
   @@unique([tenantId, cpf])
   @@unique([tenantId, id])
@@ -234,4 +235,20 @@ model ProtocolCounter {
 
   @@id([tenantId, ano])
   @@map("protocol_counters")
+}
+
+/// Acesso apenas pelas funcoes SECURITY DEFINER; nao conceder acesso direto a kronos_app.
+model PortalLink {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  candidateId String    @map("candidate_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  expiraEm    DateTime  @map("expira_em") @db.Timestamptz(3)
+  usadoEm     DateTime? @map("usado_em") @db.Timestamptz(3)
+  criadoEm    DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  candidate Candidate @relation(fields: [tenantId, candidateId], references: [tenantId, id], onDelete: NoAction, onUpdate: NoAction, map: "portal_links_candidato_fk")
+
+  @@index([tenantId, candidateId, criadoEm(sort: Desc)], map: "portal_links_candidato_idx")
+  @@map("portal_links")
 }
