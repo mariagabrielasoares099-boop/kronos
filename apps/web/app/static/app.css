@@ -132,7 +132,7 @@ button:hover { background:var(--brand-dark); }
 .auth p { color:var(--muted); }
 
 /* Quadro (kanban) */
-.kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:14px; margin:14px 0 18px; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:14px; margin:14px 0 18px; }
 .kpi { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:var(--shadow); position:relative; overflow:hidden; }
 .kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--cyan); }
 .kpi.k2::before { background:var(--brand); } .kpi.k3::before { background:var(--purple); } .kpi.k4::before { background:var(--lime); }
