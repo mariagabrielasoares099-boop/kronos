@@ -1,9 +1,12 @@
 /* KRONOS: identidade visual da logo (azul-marinho, azul, ciano, roxo e lima), menu lateral escuro, barra superior com a marca,
    cards e tabelas. Sem CDN nem fonte externa: tudo local, compativel com a CSP (style-src 'self'). */
+@font-face { font-family:"Sora"; font-weight:600; font-style:normal; font-display:swap; src:url(/static/fonts/sora-600.ttf) format("truetype"); }
+@font-face { font-family:"Sora"; font-weight:700; font-style:normal; font-display:swap; src:url(/static/fonts/sora-700.ttf) format("truetype"); }
 :root {
   --ink:#071b38; --brand:#1558d6; --brand-dark:#0f43a8; --cyan:#00dceb; --purple:#6425d9; --lime:#a6d80f; --lime-dark:#4f7a00;
   --bg:#f4f7fb; --fg:#1b2a41; --muted:#5a6a82; --card:#fff; --line:#dde4f0; --ok:#1c7c3f; --err:#c0392b; --warn:#8a5a00;
   --nav:#071b38; --nav-2:#143275; --shadow:0 1px 2px rgba(11,31,74,.06), 0 4px 14px rgba(11,31,74,.06);
+  --display:"Sora", "Segoe UI", system-ui, sans-serif;
   --grad:linear-gradient(90deg, var(--cyan), var(--brand) 38%, var(--purple) 70%, var(--lime));
 }
 * { box-sizing:border-box; }
@@ -39,32 +42,34 @@ footer { padding:18px 20px; color:var(--muted); font-size:13px; text-align:cente
 
 /* Menu lateral */
 .side { width:232px; flex:none; background:linear-gradient(180deg, var(--nav) 0%, #0e2a66 100%); color:#cfdcf5; padding:18px 0 16px; }
-.side .side-title { padding:0 22px 10px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#7f96c4; }
+.side .side-title { padding:0 22px 10px; font-size:13px; color:#8fa5d0; }
 .side nav { display:grid; gap:2px; padding:0 10px; }
 .side nav a { color:#cfdcf5; text-decoration:none; padding:10px 14px; border-radius:8px; font-size:14px; border-left:3px solid transparent; }
 .side nav a:hover { background:rgba(255,255,255,.07); color:#fff; }
 .side nav a.on { background:rgba(18,200,240,.14); color:#fff; border-left-color:var(--lime); font-weight:600; }
 
-h1 { font-size:26px; line-height:1.2; margin:0 0 8px; font-weight:700; color:var(--ink); letter-spacing:-.01em; }
+h1 { font-family:var(--display); font-size:26px; line-height:1.2; margin:0 0 8px; font-weight:700; color:var(--ink); letter-spacing:-.02em; }
 h1 small { font-size:15px; color:var(--muted); font-weight:400; margin-left:6px; }
-h2 { font-size:17px; margin:26px 0 10px; font-weight:650; color:var(--ink); }
+h2 { font-family:var(--display); font-size:17px; margin:26px 0 10px; font-weight:600; color:var(--ink); letter-spacing:-.01em; }
 h3 { font-size:15px; margin:20px 0 8px; color:var(--ink); }
 .muted { color:var(--muted); font-size:14px; }
 .lead { font-size:17px; color:var(--muted); max-width:62ch; }
 
 /* Cards, formularios e botoes */
-.cards { list-style:none; padding:0; margin:0; display:grid; gap:16px; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); }
+.cards { list-style:none; padding:0; margin:0; border-top:1px solid var(--line); }
 .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; box-shadow:var(--shadow); }
 .card h2 { margin:0 0 4px; }
-.vaga { position:relative; display:flex; flex-direction:column; gap:10px; overflow:hidden; transition:transform .15s, box-shadow .15s; }
-.vaga::before { content:""; position:absolute; left:0; right:0; top:0; height:4px; background:var(--grad); }
-.vaga:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(11,31,74,.12); }
+.vaga { position:relative; display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:6px 24px; padding:22px 6px; border-bottom:1px solid var(--line); background:transparent; border-radius:0; box-shadow:none; border-inline:0; border-top:0; }
+.vaga:hover { background:#fff; }
+.vaga h2 { margin:0; font-size:19px; }
 .vaga h2 a { color:var(--ink); text-decoration:none; }
 .vaga h2 a::after { content:""; position:absolute; inset:0; }
-.tags { display:flex; flex-wrap:wrap; gap:6px; }
+.vaga p { margin:0; grid-column:1; }
+.tags { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 4px; }
 .tag { background:#eaf0ff; color:var(--brand-dark); border-radius:999px; padding:3px 10px; font-size:12.5px; font-weight:600; }
 .tag.lime { background:#eef8cf; color:var(--lime-dark); }
-.vaga .go { margin-top:auto; font-weight:600; font-size:14px; color:var(--brand); }
+.vaga .go { grid-column:2; grid-row:1 / span 3; background:var(--brand); color:#fff; font-weight:600; font-size:14px; padding:10px 18px; border-radius:10px; white-space:nowrap; }
+.vaga:hover .go { background:var(--brand-dark); }
 .form { display:grid; gap:14px; max-width:520px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; box-shadow:var(--shadow); }
 label { display:grid; gap:5px; font-weight:600; font-size:14px; color:var(--ink); }
 label.check { display:flex; gap:10px; font-weight:400; color:var(--fg); }
@@ -82,25 +87,18 @@ button:hover { background:var(--brand-dark); }
 .status { margin:6px 0 12px; }
 .alerta.info { background:#eef5ff; border-color:#b9d2fb; border-left-color:var(--brand); color:var(--ink); }
 
-/* Cartao decorativo do hero: mostra o que o candidato acompanha */
-.hero { display:grid; grid-template-columns:minmax(0, 1.2fr) minmax(260px, .8fr); gap:32px; align-items:center; }
-.hero-card { background:rgba(255,255,255,.96); color:var(--fg); border-radius:16px; padding:18px 20px; box-shadow:0 18px 40px rgba(0,0,0,.25); }
-.hero-card .proto { display:flex; justify-content:space-between; align-items:center; font-weight:700; color:var(--ink); margin-bottom:10px; }
-.hero-card ul { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
-.hero-card li { display:flex; justify-content:space-between; align-items:center; font-size:14px; border-bottom:1px dashed var(--line); padding-bottom:7px; }
-.hero-card li:last-child { border-bottom:0; padding-bottom:0; }
-.hero-card .bar-prog { height:8px; border-radius:999px; background:#e6ecf7; overflow:hidden; margin-top:12px; }
-.hero-card .bar-prog i { display:block; height:100%; width:66%; background:var(--grad); }
-
-/* Vitrine de vagas */
-.hero { position:relative; overflow:hidden; border-radius:20px; padding:44px 40px; margin-bottom:28px; color:#fff;
-  background:radial-gradient(900px 340px at 92% -10%, rgba(18,200,240,.45), transparent 60%),
-             radial-gradient(700px 320px at 70% 120%, rgba(106,27,232,.55), transparent 60%), linear-gradient(135deg, #0b1f4a, #0f3a9a); }
-.hero h1 { color:#fff; font-size:38px; margin-bottom:12px; max-width:20ch; }
-.hero p { color:#cfe0ff; font-size:17px; max-width:54ch; margin:0 0 20px; }
-.hero .pills { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
-.hero .pill { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); border-radius:999px; padding:5px 12px; font-size:13px; }
-.hero .pill::before { content:"\2713"; color:var(--lime); margin-right:6px; font-weight:700; }
+/* Abertura: o protocolo (bilhete) e o elemento memoravel; o gradiente aparece so na barra de progresso */
+.hero { display:grid; grid-template-columns:minmax(0, 1.1fr) minmax(280px, .9fr); gap:48px; align-items:center; padding:36px 0 44px; }
+.hero h1 { font-size:44px; line-height:1.08; letter-spacing:-.03em; max-width:15ch; margin-bottom:16px; }
+.hero p { color:var(--muted); font-size:18px; line-height:1.6; max-width:46ch; margin:0; }
+.ticket-demo { position:relative; background:#fff; border:1px solid var(--line); border-radius:6px 22px 22px 6px; padding:22px 24px 22px 28px; box-shadow:0 22px 50px -18px rgba(7,27,56,.35); transform:rotate(-1.5deg); }
+.ticket-demo::before { content:""; position:absolute; left:10px; top:14px; bottom:14px; border-left:2px dotted #c3cfe4; }
+.ticket-demo .proto { font-family:var(--display); font-weight:700; font-size:21px; color:var(--ink); letter-spacing:-.01em; }
+.ticket-demo .etapa { display:flex; justify-content:space-between; align-items:center; margin:6px 0 14px; font-size:14px; color:var(--muted); }
+.ticket-demo ul { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+.ticket-demo li { display:flex; justify-content:space-between; align-items:center; font-size:14.5px; }
+.ticket-demo .bar-prog { height:6px; border-radius:999px; background:#e6ecf7; overflow:hidden; margin-top:18px; }
+.ticket-demo .bar-prog i { display:block; height:100%; width:66%; background:var(--grad); }
 .section-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:8px 0 14px; }
 .section-head h2 { margin:0; font-size:20px; }
 .vaga-layout { display:grid; grid-template-columns:minmax(0, 1.1fr) minmax(300px, 520px); gap:28px; align-items:start; }
@@ -137,12 +135,12 @@ button:hover { background:var(--brand-dark); }
 .kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--cyan); }
 .kpi.k2::before { background:var(--brand); } .kpi.k3::before { background:var(--purple); } .kpi.k4::before { background:var(--lime); }
 .kpi.k5::before { background:var(--err); } .kpi.k6::before { background:#e0a100; }
-.kpi b { display:block; font-size:28px; line-height:1.1; color:var(--ink); }
+.kpi b { display:block; font-family:var(--display); font-size:30px; line-height:1.1; color:var(--ink); }
 .kpi span { font-size:13px; color:var(--muted); }
 .kanban { display:flex; gap:14px; overflow-x:auto; padding-bottom:14px; }
 .col { min-width:236px; background:#e8edf7; border-radius:14px; padding:10px; border-top:4px solid var(--brand); }
 .col:nth-child(4n+1) { border-top-color:var(--cyan); } .col:nth-child(4n+3) { border-top-color:var(--purple); } .col:nth-child(4n) { border-top-color:var(--lime); }
-.col h2 { font-size:12px; margin:6px 6px 10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+.col h2 { font-size:14px; margin:6px 6px 10px; color:var(--ink); }
 .ticket { display:block; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:11px 12px; margin-bottom:8px; color:inherit; text-decoration:none; font-size:14px; box-shadow:var(--shadow); }
 .ticket:hover { border-color:var(--brand); transform:translateY(-1px); }
 
@@ -150,7 +148,7 @@ button:hover { background:var(--brand-dark); }
 .filtros { display:flex; gap:12px; flex-wrap:wrap; margin:12px 0; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:var(--shadow); }
 .filtros input { min-width:240px; }
 .fila { width:100%; border-collapse:separate; border-spacing:0; background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; }
-.fila th { background:#f3f6fc; color:var(--muted); text-transform:uppercase; font-size:11px; letter-spacing:.07em; }
+.fila th { background:#f3f6fc; color:var(--muted); font-size:13px; font-weight:600; }
 .fila th, .fila td { text-align:left; padding:11px 14px; border-bottom:1px solid var(--line); font-size:14px; }
 .fila tbody tr:last-child td { border-bottom:0; }
 .fila tbody tr:hover { background:#f2f7ff; }
@@ -180,11 +178,13 @@ button:hover { background:var(--brand-dark); }
 .sair button:hover { background:#f2f5fb; color:var(--ink); }
 
 /* Master-detail da fila do RH: lista a esquerda, chamado a direita; empilha no celular. */
-.mestre-detalhe { display:grid; grid-template-columns:minmax(320px, 5fr) 7fr; gap:20px; align-items:start; }
+.mestre-detalhe { display:grid; grid-template-columns:minmax(320px, 6fr) 5fr; gap:20px; align-items:start; }
 .mestre-detalhe > * { min-width:0; }
 .mestre { overflow-x:auto; }
 .mestre .fila { min-width:520px; }
 .mestre-detalhe .fila { font-size:13px; }
+.mestre-detalhe .fila th, .mestre-detalhe .fila td { padding:10px 8px; }
+.mestre-detalhe .fila td:first-child { white-space:nowrap; }
 .mestre-detalhe .fila a:focus { outline:2px solid var(--cyan); outline-offset:2px; }
 .fila tbody tr:has(a:focus) { background:#e3f1ff; box-shadow:inset 3px 0 0 var(--brand); }
 .detalhe { background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:18px 22px; min-height:200px; }
@@ -208,9 +208,11 @@ button:hover { background:var(--brand-dark); }
   .side nav a { white-space:nowrap; border-left:0; border-bottom:3px solid transparent; border-radius:8px 8px 0 0; }
   .side nav a.on { border-bottom-color:var(--lime); }
   main { padding:18px 14px; }
-  .hero { padding:28px 22px; border-radius:16px; grid-template-columns:1fr; }
-  .hero-card { display:none; }
-  .hero h1 { font-size:28px; }
+  .hero { padding:20px 0 28px; grid-template-columns:1fr; gap:28px; }
+  .ticket-demo { transform:none; }
+  .hero h1 { font-size:32px; }
+  .vaga { grid-template-columns:1fr; }
+  .vaga .go { grid-column:1; grid-row:auto; text-align:center; margin-top:10px; }
   .fila { display:block; overflow-x:auto; }
   .filtros input { min-width:0; width:100%; }
   .stepper { padding:14px 8px; }
