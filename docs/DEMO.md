@@ -12,6 +12,9 @@ npm run dev:web                                     # http://localhost:8000 (mod
 ```
 Abra `http://localhost:8000` numa janela limpa (zoom 110–125%, sem outras abas). Reinicie o servidor antes de gravar: os dados do demo ficam em memória e voltam ao estado inicial.
 
+## Identidade visual
+A logo (K com ponteiro de relógio e seta circular) fica em `apps/web/app/static/img/` (`kronos-logo.png` horizontal, `kronos-mark.png` só o símbolo e `favicon.png`). As cores do painel vêm dela (azul-marinho, azul, ciano, roxo e lima) e estão em `apps/web/app/static/app.css`. Tudo é local: sem CDN nem fonte externa, compatível com a CSP do portal.
+
 ## O que o demo mostra
 O fluxo **candidato → documentos → RH decide → admissão**, no **modo demo** do front (FastAPI + HTMX). Os dados são fictícios e a regra oficial (transições, RLS, SLA) pertence à API NestJS, que aparece no bloco 8.
 

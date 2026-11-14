@@ -1,12 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Vagas - KRONOS{% endblock %}
 {% block content %}
-<h1>Vagas abertas</h1>
+<section class="hero">
+  <div>
+  <h1>Do processo seletivo &agrave; admiss&atilde;o, sem digitar tudo de novo.</h1>
+  <p>Candidate-se, envie seus documentos pelo celular e acompanhe cada etapa com um &uacute;nico protocolo.</p>
+  <div class="pills">
+    <span class="pill">Protocolo &uacute;nico</span>
+    <span class="pill">Documentos pelo celular</span>
+    <span class="pill">Acompanhamento em tempo real</span>
+  </div>
+  </div>
+  <aside class="hero-card" aria-hidden="true">
+    <div class="proto"><span>ADM-2026-000123</span><span class="badge badge-pendente">Validacao do DP</span></div>
+    <ul>
+      <li>RG <span class="badge badge-aprovado">Aprovado</span></li>
+      <li>CPF <span class="badge badge-aprovado">Aprovado</span></li>
+      <li>Comprovante de residencia <span class="badge badge-pendente">Em analise</span></li>
+    </ul>
+    <div class="bar-prog"><i></i></div>
+  </aside>
+</section>
+<div class="section-head">
+  <h2>Vagas abertas</h2>
+  <span class="muted">{{ vagas|length }} {{ 'vaga' if vagas|length == 1 else 'vagas' }}</span>
+</div>
 <ul class="cards">
   {% for v in vagas %}
-  <li class="card">
+  <li class="card vaga">
     <h2><a href="/vagas/{{ v.id }}">{{ v.titulo }}</a></h2>
-    <p>{{ v.empresa }} &middot; {{ v.local }}</p>
+    <div class="tags"><span class="tag">{{ v.empresa }}</span><span class="tag lime">{{ v.local }}</span></div>
+    <p class="muted">{{ v.descricao }}</p>
+    <span class="go">Ver vaga e candidatar-se &rarr;</span>
   </li>
   {% else %}<li>Nenhuma vaga aberta no momento.</li>{% endfor %}
 </ul>

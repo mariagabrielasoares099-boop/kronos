@@ -1,15 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Chamado {{ chamado.protocolo }} - KRONOS{% endblock %}
 {% block content %}
+{% set fluxo = labels.keys()|list|reject('equalto', 'REPROVADO')|list %}
+{% set atual = fluxo.index(chamado.status) if chamado.status in fluxo else -1 %}
 <h1>Chamado {{ chamado.protocolo }}</h1>
 <p>Vaga: {{ vaga.titulo if vaga else '-' }}</p>
-<p class="status">Situacao atual: <strong>{{ labels[chamado.status] }}</strong></p>
+<div class="painel-status"><span>Situacao atual:</span> <span class="pill-status"><strong>{{ labels[chamado.status] }}</strong></span></div>
+{% if chamado.status == 'REPROVADO' %}
+<p class="alerta" role="status">Este processo foi encerrado.</p>
+{% else %}
+<ol class="stepper" aria-label="Etapas do processo">
+  {% for st in fluxo %}
+  <li class="{{ 'done' if loop.index0 < atual else ('atual' if loop.index0 == atual else '') }}"{% if loop.index0 == atual %} aria-current="step"{% endif %}>{{ labels[st] }}</li>
+  {% endfor %}
+</ol>
+{% endif %}
 {% if chamado.status == 'AGUARDANDO_CANDIDATO' %}
   <p class="alerta">Ha documentos pendentes. Envie-os para continuar.</p>
 {% endif %}
 
 <h2>Seus documentos</h2>
-{% if demo %}<p class="alerta">Demonstracao: use apenas arquivos ficticios. O conteudo nao e salvo nem enviado ao RH.</p>{% endif %}
+{% if demo %}<p class="alerta info">Demonstracao: use apenas arquivos ficticios. O conteudo nao e salvo nem enviado ao RH.</p>{% endif %}
 {% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
 <ul class="checklist">
   {% for item in checklist %}

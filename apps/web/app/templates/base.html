@@ -7,15 +7,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}KRONOS{% endblock %}</title>
   <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
+  <link rel="icon" type="image/png" href="/static/img/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>
 <body class="{{ 'area-rh' if rh else 'area-candidato' }}">
   {% if demo %}<div class="demo">Modo demonstracao: dados ficticios, sem autenticacao.</div>{% endif %}
+  <header class="bar">
+    <a href="{{ '/painel/fila' if rh else '/' }}" class="brand" aria-label="KRONOS, pagina inicial"><img src="/static/img/kronos-logo.png" alt="KRONOS" width="144" height="40"></a>
+    {% if rh %}
+    <span class="crumb">Painel do RH</span>
+    {% if demo %}
+    <span class="user"><span class="avatar" aria-hidden="true">DR</span>Diego (RH)</span>
+    {% else %}
+    <span class="user"><span class="avatar" aria-hidden="true">RH</span>Equipe
+      <form method="post" action="/sair" class="sair"><button type="submit">Sair</button></form></span>
+    {% endif %}
+    {% else %}
+    <nav class="bar-nav" aria-label="Portal"><a class="bar-link" href="/">Vagas abertas</a></nav>
+    {% if demo %}<a class="bar-link cta" href="/painel/fila">Area do RH</a>{% endif %}
+    {% endif %}
+  </header>
   <div class="app">
     {% if rh %}
     <aside class="side" aria-label="Menu principal">
-      <a class="logo" href="/painel/fila">KRONOS<small>Recrutamento e Admissao</small></a>
+      <div class="side-title">Recrutamento e Admissao</div>
       <nav>
         <a href="/painel/fila" class="{{ 'on' if path.startswith('/painel/fila') or path.startswith('/painel/chamado') }}">Fila de chamados</a>
         <a href="/painel" class="{{ 'on' if path == '/painel' }}">Quadro de etapas</a>
@@ -24,20 +40,6 @@
     </aside>
     {% endif %}
     <div class="content">
-      <header class="bar">
-        {% if rh %}
-        <span class="crumb">Painel do RH</span>
-        {% if demo %}
-        <span class="user"><span class="avatar" aria-hidden="true">DR</span>Diego (RH)</span>
-        {% else %}
-        <span class="user"><span class="avatar" aria-hidden="true">RH</span>Equipe
-          <form method="post" action="/sair" class="sair"><button type="submit">Sair</button></form></span>
-        {% endif %}
-        {% else %}
-        <a href="/" class="brand">KRONOS</a><span class="crumb">Portal de vagas</span>
-        {% if demo %}<a class="bar-link" href="/painel/fila">Area do RH</a>{% endif %}
-        {% endif %}
-      </header>
       <main>{% block content %}{% endblock %}</main>
       <footer>Seus dados sao tratados conforme a LGPD. A empresa e a controladora.</footer>
     </div>

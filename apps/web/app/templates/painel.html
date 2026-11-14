@@ -1,8 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Painel do RH - KRONOS{% endblock %}
 {% block content %}
+{% set total = [] %}{% for st, itens in colunas.items() %}{% for c in itens %}{% if total.append(1) %}{% endif %}{% endfor %}{% endfor %}
 <h1>Fila de chamados</h1>
 <p><a href="/painel/fila">Ver em lista com filtros e SLA</a></p>
+<div class="kpis">
+  <div class="kpi"><b>{{ total|length }}</b><span>Chamados no total</span></div>
+  <div class="kpi k2"><b>{{ colunas['AGUARDANDO_CANDIDATO']|length }}</b><span>Aguardando candidato</span></div>
+  <div class="kpi k3"><b>{{ colunas['VALIDACAO_DP']|length }}</b><span>Em validacao do DP</span></div>
+  <div class="kpi k4"><b>{{ colunas['ADMITIDO']|length }}</b><span>Admitidos</span></div>
+</div>
 <div class="kanban">
   {% for st, itens in colunas.items() %}
   <section class="col">
