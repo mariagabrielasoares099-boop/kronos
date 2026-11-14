@@ -379,7 +379,13 @@ def create_app(
         colunas = {s: [] for s in STATUSES}
         for c in gw.listar_chamados():
             colunas[c.status].append(c)
-        return render(request, "painel.html", colunas=colunas)
+        sla = {"atrasado": 0, "vencendo": 0}
+        for itens in colunas.values():
+            for c in itens:
+                situacao = sla_situacao(c)
+                if situacao in sla:
+                    sla[situacao] += 1
+        return render(request, "painel.html", colunas=colunas, sla=sla)
 
     def montar_fila(request: Request, status: str, busca: str) -> dict:
         if status and status not in STATUS_LABELS:

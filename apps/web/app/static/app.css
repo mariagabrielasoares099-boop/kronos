@@ -1,9 +1,9 @@
 /* KRONOS: identidade visual da logo (azul-marinho, azul, ciano, roxo e lima), menu lateral escuro, barra superior com a marca,
    cards e tabelas. Sem CDN nem fonte externa: tudo local, compativel com a CSP (style-src 'self'). */
 :root {
-  --ink:#0b1f4a; --brand:#1558d6; --brand-dark:#0f43a8; --cyan:#12c8f0; --purple:#6a1be8; --lime:#a6d80f; --lime-dark:#4f7a00;
-  --bg:#f2f5fb; --fg:#1b2a41; --muted:#5a6a82; --card:#fff; --line:#dde4f0; --ok:#1c7c3f; --err:#c0392b; --warn:#8a5a00;
-  --nav:#0b1f4a; --nav-2:#143275; --shadow:0 1px 2px rgba(11,31,74,.06), 0 4px 14px rgba(11,31,74,.06);
+  --ink:#071b38; --brand:#1558d6; --brand-dark:#0f43a8; --cyan:#00dceb; --purple:#6425d9; --lime:#a6d80f; --lime-dark:#4f7a00;
+  --bg:#f4f7fb; --fg:#1b2a41; --muted:#5a6a82; --card:#fff; --line:#dde4f0; --ok:#1c7c3f; --err:#c0392b; --warn:#8a5a00;
+  --nav:#071b38; --nav-2:#143275; --shadow:0 1px 2px rgba(11,31,74,.06), 0 4px 14px rgba(11,31,74,.06);
   --grad:linear-gradient(90deg, var(--cyan), var(--brand) 38%, var(--purple) 70%, var(--lime));
 }
 * { box-sizing:border-box; }
@@ -136,6 +136,7 @@ button:hover { background:var(--brand-dark); }
 .kpi { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:var(--shadow); position:relative; overflow:hidden; }
 .kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--cyan); }
 .kpi.k2::before { background:var(--brand); } .kpi.k3::before { background:var(--purple); } .kpi.k4::before { background:var(--lime); }
+.kpi.k5::before { background:var(--err); } .kpi.k6::before { background:#e0a100; }
 .kpi b { display:block; font-size:28px; line-height:1.1; color:var(--ink); }
 .kpi span { font-size:13px; color:var(--muted); }
 .kanban { display:flex; gap:14px; overflow-x:auto; padding-bottom:14px; }
