@@ -1,8 +1,8 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post,
+  Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post,
 } from '@nestjs/common';
-import type { ZodType } from 'zod';
 import { Ctx, Papeis } from '../auth/auth.decorators.js';
+import { validar } from '../comum/validacao.js';
 import type { DbContext } from '../db/db-context.js';
 import { ChamadoError } from '../domain/chamado.js';
 import { InvalidTransitionError } from '../domain/ticket-status.js';
@@ -10,16 +10,6 @@ import {
   CandidatoJaExisteError, ChamadoNaoEncontradoError, ChamadosService, ConflitoConcorrenciaError, VagaNaoEncontradaError,
 } from './chamados.service.js';
 import { CriarChamadoSchema, IdSchema, ProtocoloSchema, TransicaoSchema } from './chamados.schemas.js';
-
-/** Valida a entrada e informa SO o campo e o problema, nunca o valor recebido (pode ser dado pessoal). */
-function validar<T>(schema: ZodType<T>, valor: unknown): T {
-  const r = schema.safeParse(valor);
-  if (r.success) return r.data;
-  throw new BadRequestException({
-    message: 'Requisicao invalida',
-    erros: r.error.issues.map((i) => ({ campo: i.path.join('.') || '(raiz)', problema: i.message })),
-  });
-}
 
 /** Traduz erros de dominio para HTTP; qualquer outro vira 500 sem detalhe. */
 async function traduzir<T>(fn: () => Promise<T>): Promise<T> {
