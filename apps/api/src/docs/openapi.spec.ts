@@ -10,6 +10,7 @@ import { AuthGuard } from '../auth/auth.guard.js';
 import { assinarToken } from '../auth/token.js';
 import { ChamadosController } from '../chamados/chamados.controller.js';
 import { ChamadosService } from '../chamados/chamados.service.js';
+import { DocumentosController } from '../documentos/documentos.controller.js';
 import { HealthController } from '../health/health.controller.js';
 import { DocsController } from './docs.controller.js';
 import { construirOpenApi } from './openapi.js';
@@ -43,7 +44,7 @@ describe('OpenAPI', () => {
   });
 
   it('documenta exatamente as rotas dos controllers (sem rota esquecida nem sobrando)', () => {
-    const reais = [...rotasDe(ChamadosController), ...rotasDe(HealthController)].sort();
+    const reais = [...rotasDe(ChamadosController), ...rotasDe(DocumentosController), ...rotasDe(HealthController)].sort();
     const documentadas = Object.entries(doc.paths)
       .flatMap(([caminho, ops]) => Object.keys(ops).map((m) => `${m.toUpperCase()} ${caminho}`))
       .sort();
@@ -74,6 +75,17 @@ describe('OpenAPI', () => {
   it('papeis na descricao vem do mesmo metadado do guard', () => {
     expect(doc.paths['/chamados']!.post!.description).toContain('RECRUTADOR, DP');
     expect(doc.paths['/chamados/{protocolo}']!.get!.description).not.toContain('Papeis permitidos');
+  });
+
+  it('documentos: multipart com tipo e arquivo; decisao so do RH', () => {
+    const envio = doc.paths['/chamados/{id}/documentos']!.post!.requestBody as {
+      content: { 'multipart/form-data': { schema: { required: string[]; additionalProperties: boolean } } };
+    };
+    expect(envio.content['multipart/form-data'].schema.required).toEqual(['tipo', 'arquivo']);
+    expect(envio.content['multipart/form-data'].schema.additionalProperties).toBe(false);
+    expect(doc.paths['/chamados/{id}/documentos']!.post!.responses).toHaveProperty('413');
+    expect(doc.paths['/documentos/{id}']!.patch!.description).toContain('RECRUTADOR, DP');
+    expect(doc.paths['/chamados/{id}/documentos']!.get!.description).not.toContain('Papeis permitidos');
   });
 
   it('so /health e publica; as demais exigem Bearer', () => {

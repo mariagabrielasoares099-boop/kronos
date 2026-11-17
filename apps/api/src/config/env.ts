@@ -10,6 +10,8 @@ const schema = z.object({
   ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY precisa ter 32+ caracteres'),
   RATE_LIMIT_TTL_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+  /** Pasta dos arquivos enviados (disco local). Fora do repositorio e sem acesso publico. */
+  STORAGE_DIR: z.string().min(1).default('./storage'),
 });
 export type Env = z.infer<typeof schema>;
 
