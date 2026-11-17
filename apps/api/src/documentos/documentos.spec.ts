@@ -84,6 +84,15 @@ describe('LocalDiskStorage', () => {
     expect((await s.ler(chave)).equals(PDF)).toBe(true);
   });
 
+  it('remove o arquivo e nao falha se ele ja nao existe', async () => {
+    const s = await criar();
+    const chave = await s.salvar(T, PDF);
+    await s.remover(chave);
+    await expect(s.ler(chave)).rejects.toThrow();
+    await expect(s.remover(chave)).resolves.toBeUndefined();
+    await expect(s.remover('../../x')).rejects.toThrow(/invalida/);
+  });
+
   it('bloqueia path traversal na leitura', async () => {
     const s = await criar();
     await expect(s.ler('../../etc/passwd')).rejects.toThrow(/invalida/);
