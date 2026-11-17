@@ -3,6 +3,11 @@ import { ROLES_KEY } from '../auth/auth.decorators.js';
 import { CriarChamadoSchema, TransicaoSchema } from '../chamados/chamados.schemas.js';
 import { ChamadosController } from '../chamados/chamados.controller.js';
 import { TicketStatus } from '../domain/ticket-status.js';
+import { TipoDocumento } from '../domain/documento.js';
+import { TAMANHO_MAXIMO_BYTES } from '../documentos/arquivo.js';
+import { CAMPO_ARQUIVO, DocumentosController } from '../documentos/documentos.controller.js';
+import { DecisaoSchema, EnvioSchema } from '../documentos/documentos.schemas.js';
+import { CHECKLIST_PADRAO, MAX_DOCUMENTOS_POR_CHAMADO } from '../documentos/documentos.service.js';
 
 /**
  * Documento OpenAPI 3.1 gerado a partir dos MESMOS schemas Zod que validam a entrada
@@ -59,14 +64,55 @@ const resposta = (descricao: string, schema = 'Erro') => ({
 });
 
 /** Papeis permitidos, lidos do mesmo metadado que o AuthGuard usa. */
-function papeisDe(metodo: keyof ChamadosController): string[] {
-  const p = Reflect.getMetadata(ROLES_KEY, ChamadosController.prototype[metodo]) as string[] | undefined;
+function papeisDe<C extends object>(controller: { prototype: C }, metodo: keyof C): string[] {
+  const p = Reflect.getMetadata(ROLES_KEY, controller.prototype[metodo] as object) as string[] | undefined;
   return p ?? [];
 }
 
-const descricaoPapeis = (metodo: keyof ChamadosController, semRestricao: string) => {
-  const p = papeisDe(metodo);
+function descricaoPapeisDe<C extends object>(controller: { prototype: C }, metodo: keyof C, semRestricao: string) {
+  const p = papeisDe(controller, metodo);
   return p.length ? `Papeis permitidos: ${p.join(', ')}.` : semRestricao;
+}
+
+const descricaoPapeis = (metodo: keyof ChamadosController, semRestricao: string) =>
+  descricaoPapeisDe(ChamadosController, metodo, semRestricao);
+
+const DocumentoView: Json = {
+  type: 'object',
+  description: 'Metadados do documento. O arquivo so sai pela rota de download autenticada.',
+  required: ['id', 'chamadoId', 'tipo', 'status', 'motivo', 'mime', 'tamanhoBytes', 'enviadoEm'],
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    chamadoId: { type: 'string', format: 'uuid' },
+    tipo: { type: 'string', enum: Object.values(TipoDocumento) },
+    status: { type: 'string', enum: ['PENDENTE', 'APROVADO', 'RECUSADO'] },
+    motivo: { type: ['string', 'null'], description: 'Motivo da recusa (aparece para o candidato reenviar).' },
+    mime: { type: 'string', enum: ['image/jpeg', 'image/png', 'application/pdf'] },
+    tamanhoBytes: { type: 'integer', minimum: 1, maximum: TAMANHO_MAXIMO_BYTES },
+    enviadoEm: { type: 'string', format: 'date-time' },
+  },
+  additionalProperties: false,
+};
+
+const DocumentosDoChamado: Json = {
+  type: 'object',
+  required: ['checklist', 'documentos'],
+  properties: {
+    checklist: {
+      type: 'array',
+      description: 'Documentos exigidos e a situacao do envio mais recente de cada tipo.',
+      items: {
+        type: 'object',
+        required: ['tipo', 'situacao'],
+        properties: {
+          tipo: { type: 'string', enum: [...CHECKLIST_PADRAO] },
+          situacao: { type: 'string', enum: ['FALTANDO', 'PENDENTE', 'APROVADO', 'RECUSADO'] },
+        },
+      },
+    },
+    documentos: { type: 'array', items: ref('DocumentoView') },
+  },
+  additionalProperties: false,
 };
 
 const comuns = {
@@ -89,7 +135,7 @@ export function construirOpenApi(): Json {
     },
     servers: [{ url: 'http://localhost:3000', description: 'Desenvolvimento local' }],
     security: [{ bearerAuth: [] }],
-    tags: [{ name: 'chamados' }, { name: 'sistema' }],
+    tags: [{ name: 'chamados' }, { name: 'documentos' }, { name: 'sistema' }],
     paths: {
       '/health': {
         get: {
@@ -155,10 +201,95 @@ export function construirOpenApi(): Json {
           },
         },
       },
+      '/chamados/{id}/documentos': {
+        post: {
+          tags: ['documentos'],
+          summary: 'Envia um documento do chamado',
+          description:
+            `${descricaoPapeisDe(DocumentosController, 'enviar', 'O proprio candidato ou a equipe atribuida ao chamado (RLS).')} `
+            + `Multipart com \`tipo\` e o arquivo no campo \`${CAMPO_ARQUIVO}\`. Ate ${TAMANHO_MAXIMO_BYTES / 1024 / 1024} MB; `
+            + `so JPG, PNG ou PDF, conferidos pelo conteudo (a extensao e o Content-Type enviados sao ignorados). `
+            + `Ate ${MAX_DOCUMENTOS_POR_CHAMADO} documentos por chamado. Nasce PENDENTE.`,
+          parameters: [id],
+          requestBody: {
+            required: true,
+            content: {
+              'multipart/form-data': {
+                schema: {
+                  ...entrada(EnvioSchema),
+                  required: ['tipo', CAMPO_ARQUIVO],
+                  properties: {
+                    ...(entrada(EnvioSchema).properties as Json),
+                    [CAMPO_ARQUIVO]: { type: 'string', contentMediaType: 'application/octet-stream' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '201': resposta('Documento recebido', 'DocumentoView'),
+            '400': resposta('Campo invalido, arquivo ausente, vazio ou de tipo nao permitido'),
+            ...comuns,
+            '404': resposta('Chamado nao encontrado (ou sem permissao)'),
+            '409': resposta('Limite de documentos do chamado atingido'),
+            '413': resposta('Arquivo acima do tamanho maximo'),
+          },
+        },
+        get: {
+          tags: ['documentos'],
+          summary: 'Lista os documentos do chamado com o checklist',
+          description: descricaoPapeisDe(DocumentosController, 'listar', 'O proprio candidato ou a equipe atribuida ao chamado (RLS).'),
+          parameters: [id],
+          responses: {
+            '200': resposta('Documentos e checklist', 'DocumentosDoChamado'),
+            '400': resposta('Id invalido'),
+            ...comuns,
+            '404': resposta('Chamado nao encontrado (ou sem permissao)'),
+          },
+        },
+      },
+      '/documentos/{id}/arquivo': {
+        get: {
+          tags: ['documentos'],
+          summary: 'Baixa o arquivo do documento',
+          description: `${descricaoPapeisDe(DocumentosController, 'baixar', 'O proprio candidato ou a equipe atribuida ao chamado (RLS).')} `
+            + 'Sempre como anexo (`Content-Disposition: attachment`) e sem cache. Nao existe URL publica.',
+          parameters: [id],
+          responses: {
+            '200': {
+              description: 'Conteudo do arquivo',
+              content: Object.fromEntries(
+                ['image/jpeg', 'image/png', 'application/pdf'].map((m) => [m, { schema: { type: 'string', contentMediaType: m } }]),
+              ),
+            },
+            '400': resposta('Id invalido'),
+            ...comuns,
+            '404': resposta('Documento nao encontrado (ou sem permissao)'),
+          },
+        },
+      },
+      '/documentos/{id}': {
+        patch: {
+          tags: ['documentos'],
+          summary: 'Aprova ou recusa um documento',
+          description: `${descricaoPapeisDe(DocumentosController, 'decidir', 'Qualquer pessoa autenticada.')} `
+            + 'So a equipe atribuida ao chamado. `RECUSAR` exige `motivo`. A decisao entra na trilha do chamado.',
+          parameters: [id],
+          requestBody: { required: true, content: { 'application/json': { schema: entrada(DecisaoSchema) } } },
+          responses: {
+            '200': resposta('Decisao registrada', 'DocumentoView'),
+            '400': resposta('Requisicao invalida'),
+            ...comuns,
+            '403': resposta('Papel sem permissao'),
+            '404': resposta('Documento nao encontrado (ou sem permissao)'),
+            '409': resposta('Documento ja decidido'),
+          },
+        },
+      },
     },
     components: {
       securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } },
-      schemas: { ChamadoView, Erro },
+      schemas: { ChamadoView, DocumentoView, DocumentosDoChamado, Erro },
     },
   };
 }
