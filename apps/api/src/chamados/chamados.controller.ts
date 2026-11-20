@@ -1,5 +1,5 @@
 import {
-  Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post,
+  BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post, Query,
 } from '@nestjs/common';
 import { Ctx, Papeis } from '../auth/auth.decorators.js';
 import { validar } from '../comum/validacao.js';
@@ -9,7 +9,9 @@ import { InvalidTransitionError } from '../domain/ticket-status.js';
 import {
   CandidatoJaExisteError, ChamadoNaoEncontradoError, ChamadosService, ConflitoConcorrenciaError, VagaNaoEncontradaError,
 } from './chamados.service.js';
-import { CriarChamadoSchema, IdSchema, ProtocoloSchema, TransicaoSchema } from './chamados.schemas.js';
+import { AtribuicaoSchema, CriarChamadoSchema, IdSchema, ListarChamadosSchema, ProtocoloSchema, TransicaoSchema } from './chamados.schemas.js';
+import { AtribuicaoService, UsuarioNaoAtribuivelError, UsuarioNaoEncontradoError } from './atribuicao.service.js';
+import { ConsultaService } from './consulta.service.js';
 
 /** Traduz erros de dominio para HTTP; qualquer outro vira 500 sem detalhe. */
 async function traduzir<T>(fn: () => Promise<T>): Promise<T> {
@@ -18,6 +20,8 @@ async function traduzir<T>(fn: () => Promise<T>): Promise<T> {
   } catch (e) {
     if (e instanceof VagaNaoEncontradaError) throw new NotFoundException('Vaga nao encontrada');
     if (e instanceof ChamadoNaoEncontradoError) throw new NotFoundException('Chamado nao encontrado');
+    if (e instanceof UsuarioNaoEncontradoError) throw new NotFoundException('Usuario nao encontrado');
+    if (e instanceof UsuarioNaoAtribuivelError) throw new ConflictException('Este usuario nao pode ser atribuido a este chamado');
     if (e instanceof CandidatoJaExisteError) throw new ConflictException('Ja existe candidato com este CPF');
     if (e instanceof ConflitoConcorrenciaError) throw new ConflictException('O chamado foi alterado por outra pessoa. Recarregue');
     if (e instanceof ChamadoError || e instanceof InvalidTransitionError) throw new ConflictException(e.message);
@@ -27,7 +31,11 @@ async function traduzir<T>(fn: () => Promise<T>): Promise<T> {
 
 @Controller('chamados')
 export class ChamadosController {
-  constructor(@Inject(ChamadosService) private readonly service: ChamadosService) {}
+  constructor(
+    @Inject(ChamadosService) private readonly service: ChamadosService,
+    @Inject(ConsultaService) private readonly consulta: ConsultaService,
+    @Inject(AtribuicaoService) private readonly atribuicao: AtribuicaoService,
+  ) {}
 
   @Post()
   @HttpCode(201)
@@ -37,11 +45,47 @@ export class ChamadosController {
     return traduzir(() => this.service.criar(ctx, dto));
   }
 
+  /** Fila do RH: so a equipe (token de candidato nunca passa); o RLS filtra por empresa e atribuicao. */
+  @Get()
+  @Papeis('RECRUTADOR', 'DP', 'GESTOR_VAGA', 'AVALIADOR', 'ALMOXARIFADO')
+  listar(@Ctx() ctx: DbContext, @Query() query: unknown) {
+    return this.consulta.listar(ctx, validar(ListarChamadosSchema, query));
+  }
+
+  /** Detalhe para a equipe: nomes da vaga, da pessoa e do responsavel, e o prazo de SLA. */
+  @Get(':protocolo/resumo')
+  @Papeis('RECRUTADOR', 'DP', 'GESTOR_VAGA', 'AVALIADOR', 'ALMOXARIFADO')
+  resumo(@Ctx() ctx: DbContext, @Param('protocolo') protocolo: string) {
+    const p = validar(ProtocoloSchema, protocolo);
+    return traduzir(() => this.consulta.resumo(ctx, p));
+  }
+
+  /** Linha do tempo (ticket_events, append-only). So equipe: contem motivos de devolucao/reprovacao. */
+  @Get(':id/eventos')
+  @Papeis('RECRUTADOR', 'DP', 'GESTOR_VAGA', 'AVALIADOR', 'ALMOXARIFADO')
+  eventos(@Ctx() ctx: DbContext, @Param('id') id: string) {
+    const chamadoId = validar(IdSchema, id);
+    return traduzir(() => this.consulta.eventos(ctx, chamadoId));
+  }
+
   /** Sem @Papeis: o RLS decide o que cada pessoa (inclusive o candidato) pode ver. */
   @Get(':protocolo')
   obter(@Ctx() ctx: DbContext, @Param('protocolo') protocolo: string) {
     const p = validar(ProtocoloSchema, protocolo);
     return traduzir(() => this.service.obterPorProtocolo(ctx, p));
+  }
+
+  /**
+   * Atribui o chamado a uma pessoa da equipe (por padrao, a quem chama). Documentos so aparecem e so sao decididos por
+   * quem esta atribuido. Quem atribui precisa de RECRUTADOR/DP; o RLS e o trigger do banco validam tenant e empresa.
+   */
+  @Post(':id/atribuicao')
+  @HttpCode(200)
+  @Papeis('RECRUTADOR', 'DP')
+  atribuir(@Ctx() ctx: DbContext, @Param('id') id: string, @Body() body: unknown) {
+    const chamadoId = validar(IdSchema, id);
+    const dto = validar(AtribuicaoSchema, body ?? {});
+    return traduzir(() => this.atribuicao.atribuir(ctx, chamadoId, dto.usuarioId));
   }
 
   @Post(':id/transicoes')

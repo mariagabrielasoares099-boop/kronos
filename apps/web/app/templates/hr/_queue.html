@@ -1,0 +1,9 @@
+{% for c, situacao in linhas %}
+<a class="hr-ticket {{ 'is-selected' if selecionado == c.protocolo }}" href="/rh/dashboard?selecionado={{ c.protocolo }}" data-ticket="{{ c.protocolo }}"
+   hx-get="/rh/chamados/{{ c.protocolo }}" hx-target="#workspace-detail" hx-indicator="#workspace-loading" hx-push-url="/rh/dashboard?selecionado={{ c.protocolo }}">
+  <div class="hr-ticket-top"><span class="hr-person-avatar">{{ c.nome[:2]|upper }}</span><div><strong>{{ c.nome }}</strong><small>{{ c.protocolo }}</small></div><span class="hr-ticket-arrow" aria-hidden="true">↗</span></div>
+  <p>{{ c.vaga_titulo or 'Processo de admissão' }}</p>
+  <div class="hr-ticket-bottom"><span class="hr-sla hr-sla-{{ situacao }}">{{ sla_labels[situacao] }}</span><span class="hr-match">IA em breve</span></div>
+  <span class="hr-ticket-stage">{{ labels[c.status] }}</span>
+</a>
+{% else %}<div class="hr-empty"><p>Nenhum chamado encontrado.</p></div>{% endfor %}

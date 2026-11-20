@@ -14,10 +14,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         resp = await call_next(request)
         resp.headers["Content-Security-Policy"] = CSP
+        if request.url.path.startswith("/rh/"):
+            resp.headers["Cache-Control"] = "no-store"
+            resp.headers["Referrer-Policy"] = "no-referrer"
         resp.headers["X-Content-Type-Options"] = "nosniff"
-        resp.headers["Referrer-Policy"] = "same-origin"
+        resp.headers["Referrer-Policy"] = "no-referrer" if request.url.path.startswith("/rh/") else "same-origin"
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Permissions-Policy"] = "camera=(self), microphone=()"
+        if request.url.path.startswith("/chamado/"):
+            resp.headers["Cache-Control"] = "no-store"
+            resp.headers["Referrer-Policy"] = "no-referrer"
         return resp
 
 

@@ -13,6 +13,27 @@ O recrutamento acontece num lugar (Gupy, planilha, e-mail) e a admissão em outr
 3. **Admissão**: aprovado o candidato, os dados validados seguem para o ERP do cliente.
 
 Leitura rápida para a equipe: [`docs/RESUMO.md`](docs/RESUMO.md).
+Quer ver funcionando? Roteiro de demonstração em [`docs/DEMO.md`](docs/DEMO.md).
+
+## Começar rápido (modo demonstração)
+Guia completo, com regras de uso, usuários de teste, ingestão/MCP e celular: **[`Passo a Passo/`](Passo%20a%20Passo/README.md)**.
+
+```powershell
+cd apps/web
+python -m venv .venv ; .venv\Scripts\Activate.ps1      # Mac/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+$env:DEMO_MODE = 'true'                                # Mac/Linux: export DEMO_MODE=true
+python -m uvicorn app.main:app --port 8000             # abra http://127.0.0.1:8000
+python scripts/semear_candidatos.py http://127.0.0.1:8000   # candidatos de teste (outro terminal)
+```
+
+| Quero… | Onde |
+|---|---|
+| Instalar em outro computador | [Passo a Passo/01](Passo%20a%20Passo/01-subir-o-kronos-no-computador.md) |
+| Entender as regras do sistema | [Passo a Passo/02](Passo%20a%20Passo/02-como-usar-o-kronos.md) |
+| Usuários e roteiro de teste | [Passo a Passo/03](Passo%20a%20Passo/03-usuarios-de-teste.md) |
+| Ingestão (RAG), Ollama e MCP | [Passo a Passo/04](Passo%20a%20Passo/04-ingestao-e-mcp.md) |
+| Usar no celular | [Passo a Passo/05](Passo%20a%20Passo/05-usar-no-celular.md) |
 
 ## Stack
 | Camada | Tecnologia |

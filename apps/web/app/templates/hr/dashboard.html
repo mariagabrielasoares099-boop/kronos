@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Visão do analista · KRONOS{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/hr.css">
+<script src="/static/hr.js" defer></script>
+{% endblock %}
+{% block content %}
+<div class="hr-page" hx-history="false">
+  <div class="hr-heading"><div><p class="hr-eyebrow">SEU ESPAÇO DE TRABALHO</p><h1>Visão do analista<span>.</span></h1><p>Acompanhe pessoas. Conecte as próximas etapas.</p></div><span class="hr-live"><i></i>{{ 'Ambiente demonstrativo' if demo else 'Conectado à API' }}</span></div>
+  <div class="hr-metrics"><div><span>Na sua fila</span><strong>{{ linhas|length }} <small>chamados</small></strong></div><div><span>Organização</span><strong>Um fluxo<small> do recrutamento à admissão</small></strong></div><div><span>Inteligência assistida</span><strong>Você decide<small> a IA ajuda a preparar</small></strong></div></div>
+  <div class="hr-grid">
+    <aside class="hr-master" aria-label="Fila inteligente">
+      <div class="hr-section-heading"><h2>Fila inteligente</h2><span class="hr-count">{{ linhas|length }}</span></div>
+      <form class="hr-filters" method="get" action="/rh/dashboard" hx-get="/rh/fila" hx-target="#hr-queue" hx-trigger="input changed delay:350ms, change" hx-indicator="#queue-loading">
+        <label class="hr-search"><span class="sr-only">Buscar chamados</span><input type="search" name="busca" maxlength="60" value="{{ busca }}" placeholder="Buscar nome ou protocolo…"></label>
+        <label><span class="sr-only">Filtrar por etapa</span><select name="status"><option value="">Todas as etapas</option>{% for st, label in labels.items() %}<option value="{{ st }}" {{ 'selected' if st == status }}>{{ label }}</option>{% endfor %}</select></label>
+        <noscript><button>Filtrar</button></noscript>
+      </form>
+      <span id="queue-loading" class="htmx-indicator hr-loading" role="status">Atualizando fila…</span>
+      <div id="hr-queue" hx-get="/rh/fila" hx-include=".hr-filters" hx-trigger="hrRefreshQueue from:body">{% include "hr/_queue.html" %}</div>
+      <p class="hr-queue-note">Match e sugestões de IA serão integrados pelo NestJS em uma próxima etapa.</p>
+    </aside>
+    <section id="workspace-detail" class="hr-workspace" aria-label="Área de trabalho do chamado" aria-live="polite">
+      {% if chamado %}{% include "hr/_workspace.html" %}{% else %}<div class="hr-empty"><h2>Sua fila está em dia</h2><p>Nenhum chamado corresponde aos filtros.</p></div>{% endif %}
+    </section>
+  </div>
+  <div id="hr-dialog" aria-live="polite"></div>
+</div>
+{% endblock %}

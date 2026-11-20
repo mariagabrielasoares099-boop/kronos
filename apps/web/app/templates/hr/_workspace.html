@@ -1,0 +1,21 @@
+<div class="hr-workspace-inner" data-selected="{{ chamado.protocolo }}">
+  <header class="hr-candidate"><div class="hr-candidate-avatar">{{ chamado.nome[:2]|upper }}</div><div><p class="hr-eyebrow">{{ chamado.protocolo }}</p><h2>{{ chamado.nome }}</h2><p>{{ vaga.titulo if vaga else (chamado.vaga_titulo or 'Processo de admissão') }}</p></div><span class="hr-stage">{{ labels[chamado.status] }}</span></header>
+  <div class="hr-owner"><span>Responsável: <strong>{{ chamado.responsavel or 'Não atribuído' }}</strong></span><a href="/painel/chamado/{{ chamado.protocolo }}">Abrir ficha completa ↗</a></div>
+  <nav class="hr-tabs" aria-label="Abas do chamado">
+    {% for key, label, numero in [('resumo', 'Resumo & Match', '01'), ('documentos', 'Documentos', '02'), ('historico', 'Histórico & ERP', '03')] %}
+    <a class="{{ 'is-active' if aba == key }}" href="/rh/dashboard?selecionado={{ chamado.protocolo }}&aba={{ key }}" aria-current="{{ 'page' if aba == key else 'false' }}"
+       hx-get="/rh/chamados/{{ chamado.protocolo }}?aba={{ key }}" hx-target="#workspace-detail" hx-indicator="#workspace-loading"><span>{{ numero }}</span>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <span id="workspace-loading" class="htmx-indicator hr-loading" role="status">Carregando chamado…</span>
+  <div class="hr-tab-content">
+    {% if erro_acao %}<p class="hr-alert" role="alert">{{ erro_acao }}</p>{% endif %}
+    {% if aba == 'resumo' %}{% include "hr/_analysis.html" %}
+    {% elif aba == 'documentos' %}{% include "hr/_documents.html" %}
+    {% else %}
+    <div class="hr-section-heading"><h3>Cada etapa, registrada</h3><span class="hr-muted">Histórico de transições</span></div>
+    <ol class="hr-timeline">{% for st, motivo in chamado.historico %}<li><span class="hr-event-dot"></span><strong>{{ labels.get(st, st) }}</strong><p>{{ motivo }}</p></li>{% else %}<li>Nenhum evento disponível.</li>{% endfor %}</ol>
+    <div class="hr-export-card"><span class="hr-eyebrow">PRÓXIMA ETAPA</span><h3>Dados organizados para a admissão</h3><p>Confira a prévia JSON do modelo canônico. O layout de importação do ERP ainda precisa ser definido.</p><button type="button" hx-get="/rh/chamados/{{ chamado.protocolo }}/export-erp" hx-target="#hr-dialog" hx-indicator="#workspace-loading">Gerar Arquivo de Admissão (ERP)</button><small>Prévia demonstrativa · não pronta para importação</small></div>
+    {% endif %}
+  </div>
+</div>

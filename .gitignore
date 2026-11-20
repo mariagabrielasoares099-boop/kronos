@@ -27,3 +27,11 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 .aider*
+
+# Documentos enviados (dados pessoais): nunca versionar
+apps/api/storage/
+storage/
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+# Base do RAG (gerada por rag_ingest)
+apps/web/data/

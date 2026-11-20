@@ -11,5 +11,11 @@ services:
   redis:
     image: redis:7
     ports: ["127.0.0.1:${REDIS_PORT:-6379}:6379"]
+  # E-mail de desenvolvimento: recebe o SMTP da API (link de acesso do candidato) e mostra na tela. Nada sai da maquina.
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
 volumes:
   pgdata:

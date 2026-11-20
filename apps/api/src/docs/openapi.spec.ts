@@ -10,6 +10,8 @@ import { AuthGuard } from '../auth/auth.guard.js';
 import { assinarToken } from '../auth/token.js';
 import { ChamadosController } from '../chamados/chamados.controller.js';
 import { ChamadosService } from '../chamados/chamados.service.js';
+import { AtribuicaoService } from '../chamados/atribuicao.service.js';
+import { ConsultaService } from '../chamados/consulta.service.js';
 import { DocumentosController } from '../documentos/documentos.controller.js';
 import { HealthController } from '../health/health.controller.js';
 import { DocsController } from './docs.controller.js';
@@ -104,6 +106,8 @@ describe('GET /openapi.json (guard real)', () => {
       controllers: [DocsController, ChamadosController],
       providers: [
         { provide: ChamadosService, useValue: {} },
+        { provide: ConsultaService, useValue: {} },
+        { provide: AtribuicaoService, useValue: {} },
         { provide: ConfigService, useValue: { get: () => 'segredo-de-teste-com-mais-de-32-caracteres' } },
         { provide: APP_GUARD, useClass: AuthGuard },
       ],

@@ -165,6 +165,70 @@ describe.skipIf(!ADMIN || !APP)('API de chamados (HTTP + RLS)', () => {
     expect(e.rows.every((r) => r.autor === rhA)).toBe(true);
   });
 
+  describe('fila e linha do tempo para a equipe (so leitura)', () => {
+    const lista = (auth: string, qs = '') => http.get(`/chamados${qs}`).set('Authorization', auth);
+    let protocolo2 = '', chamado2 = '';
+
+    it('lista so os chamados das empresas da pessoa, com nomes e sem CPF nem e-mail', async () => {
+      const r = await lista(tRhA).expect(200);
+      expect(r.body).toHaveLength(2);
+      expect(r.body.map((c: { protocolo: string }) => c.protocolo)).toContain(protocolo1);
+      expect(r.body[0]).toMatchObject({ vagaTitulo: 'va', candidatoNome: 'Maria Souza', responsavelNome: null, prazoSla: null });
+      expect(JSON.stringify(r.body)).not.toMatch(/5299822|11144477|@example/);
+      const outro = r.body.find((c: { protocolo: string }) => c.protocolo !== protocolo1);
+      protocolo2 = outro.protocolo;
+      chamado2 = outro.id;
+      expect((await lista(tRhX).expect(200)).body).toEqual([]); // outra empresa: o RLS esconde tudo
+    });
+
+    it('exige token de equipe: sem token 401; ADMIN e candidato 403', async () => {
+      await http.get('/chamados').expect(401);
+      await lista(tAdmin).expect(403);
+      await lista(tok({ tenantId: T, candidateId: id() })).expect(403);
+    });
+
+    it('filtra por status e busca por protocolo, nome ou CPF; valida a querystring', async () => {
+      expect((await lista(tRhA, '?status=APROVADO').expect(200)).body.map((c: { protocolo: string }) => c.protocolo)).toEqual([protocolo1]);
+      expect((await lista(tRhA, `?busca=${protocolo2}`).expect(200)).body).toHaveLength(1);
+      expect((await lista(tRhA, '?busca=52998224725').expect(200)).body.map((c: { protocolo: string }) => c.protocolo)).toEqual([protocolo1]);
+      expect((await lista(tRhA, '?busca=529.982.247-25').expect(200)).body).toHaveLength(1);
+      expect((await lista(tRhA, '?busca=maria').expect(200)).body).toHaveLength(2);
+      expect((await lista(tRhA, '?busca=zzz').expect(200)).body).toEqual([]);
+      expect((await lista(tRhA, '?limite=1').expect(200)).body).toHaveLength(1);
+      for (const ruim of ['?status=HACK', '?limite=0', '?limite=999', '?outro=1', `?busca=${'x'.repeat(61)}`]) {
+        await lista(tRhA, ruim).expect(400);
+      }
+    });
+
+    it('ordena pelo prazo de SLA mais proximo e mostra o responsavel', async () => {
+      await admin.query(`UPDATE tickets SET prazo_sla = now() - interval '1 hour', responsavel = $2 WHERE id = $1`, [chamado2, rhA]);
+      const r = (await lista(tRhA).expect(200)).body;
+      expect(r[0]).toMatchObject({ protocolo: protocolo2, responsavelNome: 'rha' });
+      expect(new Date(r[0].prazoSla).getTime()).toBeLessThan(Date.now());
+      expect(r[1].prazoSla).toBeNull(); // sem prazo, por ultimo
+    });
+
+    it('resumo por protocolo: so equipe com acesso; outra empresa 404; candidato 403', async () => {
+      const r = await http.get(`/chamados/${protocolo1}/resumo`).set('Authorization', tRhA).expect(200);
+      expect(r.body).toMatchObject({ id: chamado1, protocolo: protocolo1, status: 'APROVADO', vagaTitulo: 'va', candidatoNome: 'Maria Souza' });
+      await http.get(`/chamados/${protocolo1}/resumo`).set('Authorization', tRhX).expect(404);
+      await http.get(`/chamados/${protocolo1}/resumo`).set('Authorization', tok({ tenantId: T, candidateId: id() })).expect(403);
+      await http.get('/chamados/ADM-2026-1/resumo').set('Authorization', tRhA).expect(400);
+      await http.get('/chamados/ADM-2026-999999/resumo').set('Authorization', tRhA).expect(404);
+    });
+
+    it('linha do tempo em ordem, com autor; outra empresa 404; candidato 403; id invalido 400', async () => {
+      const r = await http.get(`/chamados/${chamado1}/eventos`).set('Authorization', tRhA).expect(200);
+      expect(r.body.map((e: { tipo: string; de: string | null; para: string }) => `${e.tipo}:${e.de ?? '-'}>${e.para}`)).toEqual([
+        'CRIADO:->TRIAGEM', 'TRANSICAO:TRIAGEM>TESTES', 'TRANSICAO:TESTES>APROVADO',
+      ]);
+      expect(r.body.every((e: { autorNome: string }) => e.autorNome === 'rha')).toBe(true);
+      await http.get(`/chamados/${chamado1}/eventos`).set('Authorization', tRhX).expect(404);
+      await http.get(`/chamados/${chamado1}/eventos`).set('Authorization', tok({ tenantId: T, candidateId: id() })).expect(403);
+      await http.get('/chamados/nao-e-uuid/eventos').set('Authorization', tRhA).expect(400);
+    });
+  });
+
   it('reprovar encerra o chamado e nada mais avanca', async () => {
     const r = await http.post('/chamados').set('Authorization', tRhA).send(novo('390.533.447-05')).expect(201);
     await http.post(`/chamados/${r.body.id}/transicoes`).set('Authorization', tRhA).send({ acao: 'REPROVAR', motivo: 'nota de corte' }).expect(200);

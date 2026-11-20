@@ -1,0 +1,33 @@
+<section id="docs" class="docs">
+  <h2>Documentos</h2>
+  {% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
+  {% if chamado.docs_indisponiveis %}
+  <p class="muted" role="status">Voc&ecirc; ainda n&atilde;o est&aacute; atribu&iacute;do a este chamado, por isso os documentos
+    n&atilde;o aparecem.</p>
+  <form method="post" action="/painel/chamado/{{ chamado.protocolo }}/atribuir"
+        hx-post="/painel/chamado/{{ chamado.protocolo }}/atribuir" hx-target="#detalhe" hx-swap="innerHTML">
+    <button type="submit">Assumir este chamado</button>
+  </form>
+  {% else %}
+  <ul class="checklist">
+    {% for item in checklist %}
+    <li class="item item-{{ item.status|lower }}">
+      <div class="item-topo">
+        <strong>{{ tipos[item.tipo] }}</strong>
+        <span class="badge badge-{{ item.status|lower }}">{{ {'FALTANDO': 'Faltando', 'PENDENTE': 'Aguardando decisão', 'APROVADO': 'Aprovado', 'RECUSADO': 'Recusado'}[item.status] }}</span>
+      </div>
+      {% if item.doc and api %}<p><a href="/painel/chamado/{{ chamado.protocolo }}/documentos/{{ item.doc.id }}/arquivo">Baixar arquivo</a></p>{% endif %}
+      {% if item.doc and item.doc.status == 'RECUSADO' %}<p class="muted">Motivo: {{ item.doc.motivo }}</p>{% endif %}
+      {% if item.doc and item.doc.status == 'PENDENTE' %}
+      <form class="decisao" hx-post="/painel/documentos/{{ item.doc.id }}/decisao" hx-target="#docs" hx-swap="outerHTML">
+        <input type="hidden" name="protocolo" value="{{ chamado.protocolo }}">
+        <input name="motivo" maxlength="500" placeholder="Motivo (obrigatório para recusar)" aria-label="Motivo da recusa">
+        <button name="acao" value="aprovar" class="btn-ok">Aprovar</button>
+        <button name="acao" value="recusar" class="btn-err">Recusar</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>

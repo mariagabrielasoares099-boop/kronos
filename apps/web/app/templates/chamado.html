@@ -1,13 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Chamado {{ chamado.protocolo }} - KRONOS{% endblock %}
 {% block content %}
+{% set fluxo = labels.keys()|list|reject('equalto', 'REPROVADO')|list %}
+{% set atual = fluxo.index(chamado.status) if chamado.status in fluxo else -1 %}
 <h1>Chamado {{ chamado.protocolo }}</h1>
 <p>Vaga: {{ vaga.titulo if vaga else '-' }}</p>
-<p class="status">Situacao atual: <strong>{{ labels[chamado.status] }}</strong></p>
-{% if chamado.status == 'AGUARDANDO_CANDIDATO' %}
-  <p class="alerta">Ha documentos pendentes. Envie-os para continuar.</p>
+<div class="painel-status"><span>Situação atual:</span> <span class="pill-status"><strong>{{ labels[chamado.status] }}</strong></span></div>
+{% if chamado.status == 'REPROVADO' %}
+<p class="alerta" role="status">Este processo foi encerrado.</p>
+{% else %}
+<div class="stepper-scroll" role="region" aria-label="Etapas do processo" tabindex="0">
+<ol class="stepper">
+  {% for st in fluxo %}
+  <li class="{{ 'done' if loop.index0 < atual else ('atual' if loop.index0 == atual else '') }}"{% if loop.index0 == atual %} aria-current="step"{% endif %}>{{ labels[st] }}</li>
+  {% endfor %}
+</ol>
+</div>
 {% endif %}
-<h2>Historico</h2>
+{% if chamado.status == 'AGUARDANDO_CANDIDATO' %}
+  <p class="alerta">Há documentos pendentes. Envie-os para continuar.</p>
+{% endif %}
+
+<h2>Seus documentos</h2>
+{% if demo %}<p class="alerta info">Demonstração: use apenas arquivos fictícios. O conteúdo não é salvo nem enviado ao RH.</p>{% endif %}
+{% if erro %}<p class="alerta" role="alert">{{ erro }}</p>{% endif %}
+<ul class="checklist">
+  {% for item in checklist %}
+  <li class="item item-{{ item.status|lower }}">
+    <div class="item-topo"><strong>{{ tipos[item.tipo] }}</strong>
+      <span class="badge badge-{{ item.status|lower }}">{{ {'FALTANDO': 'Faltando', 'PENDENTE': 'Em análise', 'APROVADO': 'Aprovado', 'RECUSADO': 'Recusado'}[item.status] }}</span></div>
+    {% if item.doc and item.doc.status == 'RECUSADO' %}<p class="muted">Recusado: {{ item.doc.motivo }}. Envie novamente.</p>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+<form class="form" method="post" action="/chamado/{{ chamado.protocolo }}/documentos" enctype="multipart/form-data">
+  <label>Tipo
+    <select name="tipo" required>
+      {% for k, nome in tipos.items() %}<option value="{{ k }}">{{ nome }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Arquivo (JPG, PNG ou PDF, até 5 MB)
+    <input type="file" name="arquivo" accept="image/jpeg,image/png,application/pdf" capture="environment" required>
+  </label>
+  <button>Enviar documento</button>
+</form>
+
+<h2>Histórico</h2>
 <ol class="timeline">
   {% for st, motivo in chamado.historico %}
   <li><strong>{{ labels[st] }}</strong> &mdash; {{ motivo }}</li>

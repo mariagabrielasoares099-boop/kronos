@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ROLES_KEY } from '../auth/auth.decorators.js';
-import { CriarChamadoSchema, TransicaoSchema } from '../chamados/chamados.schemas.js';
+import { AtribuicaoSchema, CriarChamadoSchema, ListarChamadosSchema, TransicaoSchema } from '../chamados/chamados.schemas.js';
 import { ChamadosController } from '../chamados/chamados.controller.js';
 import { TicketStatus } from '../domain/ticket-status.js';
 import { TipoDocumento } from '../domain/documento.js';
@@ -32,6 +32,52 @@ const ChamadoView: Json = {
     status: { type: 'string', enum: Object.values(TicketStatus) },
     jobId: { type: 'string', format: 'uuid' },
     erpRef: { type: ['string', 'null'], description: 'Referencia no ERP, preenchida apos o envio.' },
+  },
+  additionalProperties: false,
+};
+
+const ChamadoResumoView: Json = {
+  type: 'object',
+  description: 'Linha da fila da equipe. Nomes vem null quando o RLS esconde a vaga ou a pessoa; sem CPF nem e-mail.',
+  required: ['id', 'protocolo', 'status', 'vagaTitulo', 'candidatoNome', 'responsavelNome', 'prazoSla', 'criadoEm'],
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    protocolo: { type: 'string', pattern: '^ADM-\d{4}-\d{6}$' },
+    status: { type: 'string', enum: Object.values(TicketStatus) },
+    vagaTitulo: { type: ['string', 'null'] },
+    candidatoNome: { type: ['string', 'null'] },
+    responsavelNome: { type: ['string', 'null'] },
+    prazoSla: { type: ['string', 'null'], format: 'date-time' },
+    criadoEm: { type: 'string', format: 'date-time' },
+  },
+  additionalProperties: false,
+};
+
+const EventoView: Json = {
+  type: 'object',
+  description: 'Item da linha do tempo do chamado.',
+  required: ['tipo', 'de', 'para', 'motivo', 'detalhe', 'autorNome', 'em'],
+  properties: {
+    tipo: { type: 'string' },
+    de: { type: ['string', 'null'] },
+    para: { type: ['string', 'null'] },
+    motivo: { type: ['string', 'null'] },
+    detalhe: { type: ['string', 'null'], description: 'Texto pronto de eventos sem status, como a atribuicao.' },
+    autorNome: { type: ['string', 'null'] },
+    em: { type: 'string', format: 'date-time' },
+  },
+  additionalProperties: false,
+};
+
+const AtribuicaoView: Json = {
+  type: 'object',
+  description: 'Resultado da atribuicao. `jaAtribuido: true` = nada foi gravado de novo.',
+  required: ['chamadoId', 'usuarioId', 'usuarioNome', 'jaAtribuido'],
+  properties: {
+    chamadoId: { type: 'string', format: 'uuid' },
+    usuarioId: { type: 'string', format: 'uuid' },
+    usuarioNome: { type: 'string' },
+    jaAtribuido: { type: 'boolean' },
   },
   additionalProperties: false,
 };
@@ -120,6 +166,12 @@ const comuns = {
   '429': resposta('Limite de requisicoes excedido'),
 };
 
+/** Parametros de querystring a partir do schema Zod (objeto simples). */
+function queryDe(schema: z.ZodType): Json[] {
+  const { properties = {}, required = [] } = entrada(schema) as { properties?: Record<string, Json>; required?: string[] };
+  return Object.entries(properties).map(([name, sch]) => ({ name, in: 'query', required: required.includes(name), schema: sch }));
+}
+
 export function construirOpenApi(): Json {
   const protocolo = { name: 'protocolo', in: 'path', required: true, schema: { type: 'string', pattern: '^ADM-\\d{4}-\\d{6}$' } };
   const id = { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } };
@@ -155,6 +207,18 @@ export function construirOpenApi(): Json {
         },
       },
       '/chamados': {
+        get: {
+          tags: ['chamados'],
+          summary: 'Fila da equipe: lista chamados por prazo de SLA',
+          description: `${descricaoPapeis('listar', 'Somente equipe.')} Filtros: \`status\`, \`busca\` (protocolo, nome ou CPF) e \`limite\`. Mais urgentes primeiro.`,
+          parameters: queryDe(ListarChamadosSchema),
+          responses: {
+            '200': { description: 'Chamados visiveis para a pessoa', content: { 'application/json': { schema: { type: 'array', items: ref('ChamadoResumoView') } } } },
+            '400': resposta('Filtro invalido'),
+            ...comuns,
+            '403': resposta('Papel sem permissao'),
+          },
+        },
         post: {
           tags: ['chamados'],
           summary: 'Abre um chamado cadastrando o candidato',
@@ -170,6 +234,36 @@ export function construirOpenApi(): Json {
           },
         },
       },
+      '/chamados/{protocolo}/resumo': {
+        get: {
+          tags: ['chamados'],
+          summary: 'Resumo do chamado para a equipe (vaga, pessoa, responsavel, SLA)',
+          description: descricaoPapeis('resumo', 'Somente equipe.'),
+          parameters: [protocolo],
+          responses: {
+            '200': resposta('Resumo do chamado', 'ChamadoResumoView'),
+            '400': resposta('Protocolo em formato invalido'),
+            ...comuns,
+            '403': resposta('Papel sem permissao'),
+            '404': resposta('Chamado nao encontrado (ou sem permissao para ve-lo)'),
+          },
+        },
+      },
+      '/chamados/{id}/eventos': {
+        get: {
+          tags: ['chamados'],
+          summary: 'Linha do tempo do chamado',
+          description: descricaoPapeis('eventos', 'Somente equipe.'),
+          parameters: [id],
+          responses: {
+            '200': { description: 'Eventos em ordem cronologica', content: { 'application/json': { schema: { type: 'array', items: ref('EventoView') } } } },
+            '400': resposta('Identificador invalido'),
+            ...comuns,
+            '403': resposta('Papel sem permissao'),
+            '404': resposta('Chamado nao encontrado (ou sem permissao para ve-lo)'),
+          },
+        },
+      },
       '/chamados/{protocolo}': {
         get: {
           tags: ['chamados'],
@@ -181,6 +275,25 @@ export function construirOpenApi(): Json {
             '400': resposta('Protocolo em formato invalido'),
             ...comuns,
             '404': resposta('Chamado nao encontrado (ou sem permissao para ve-lo)'),
+          },
+        },
+      },
+      '/chamados/{id}/atribuicao': {
+        post: {
+          tags: ['chamados'],
+          summary: 'Atribui o chamado a uma pessoa da equipe (por padrao, a quem chama)',
+          description: `${descricaoPapeis('atribuir', 'Somente equipe.')} Documentos so aparecem e so sao decididos por quem esta atribuido. `
+            + 'O atribuido precisa ser RECRUTADOR ou DP e ter vinculo com a empresa do chamado; o RLS exige que o chamado seja visivel a quem atribui. '
+            + 'Registra o evento `ATRIBUICAO` (autor, destino e data) na linha do tempo. Repetir e idempotente.',
+          parameters: [id],
+          requestBody: { required: false, content: { 'application/json': { schema: entrada(AtribuicaoSchema) } } },
+          responses: {
+            '200': resposta('Atribuido (ou ja estava)', 'AtribuicaoView'),
+            '400': resposta('Requisicao invalida'),
+            ...comuns,
+            '403': resposta('Papel sem permissao'),
+            '404': resposta('Chamado ou usuario nao encontrado (ou sem permissao para ve-los)'),
+            '409': resposta('Usuario sem vinculo com a empresa do chamado ou com papel que nao opera documentos'),
           },
         },
       },
@@ -289,7 +402,7 @@ export function construirOpenApi(): Json {
     },
     components: {
       securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } },
-      schemas: { ChamadoView, DocumentoView, DocumentosDoChamado, Erro },
+      schemas: { ChamadoView, ChamadoResumoView, EventoView, AtribuicaoView, DocumentoView, DocumentosDoChamado, Erro },
     },
   };
 }

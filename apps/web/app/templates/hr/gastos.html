@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Uso e custos · KRONOS{% endblock %}
+{% block content %}
+<h1>Uso e custos</h1>
+<p class="lead">Consumo da empresa contra a cota do plano. A IA roda local (Ollama), então o custo de IA é <strong>R$ 0,00</strong>.</p>
+<p class="alerta info">Dados de exemplo: os meses anteriores e a base do mês atual são fictícios. Só as buscas e respostas feitas na Base de conhecimento (<strong>{{ uso.real.busca + uso.real.ia }}</strong> nesta sessão) são medidas de verdade.</p>
+
+<h2>Mês atual ({{ uso.atual.mes }})</h2>
+<ul class="ap-cotas">
+  {% for u in uso.uso %}
+  <li>
+    <div class="ap-cota-topo"><span>{{ u.nome }}</span><strong>{{ '{:,}'.format(u.valor).replace(',', '.') }} de {{ '{:,}'.format(u.cota).replace(',', '.') }} ({{ u.pct }}%)</strong></div>
+    <meter class="ap-barra" min="0" max="100" low="70" high="90" optimum="0" value="{{ u.pct }}" aria-label="{{ u.nome }}: {{ u.pct }}% da cota">{{ u.pct }}%</meter>
+  </li>
+  {% endfor %}
+</ul>
+
+<h2>Histórico</h2>
+<div class="ap-tabela" role="region" aria-label="Histórico de uso por mês" tabindex="0">
+<table>
+  <caption class="sr-only">Uso e custo por mês</caption>
+  <thead><tr><th scope="col">Mês</th><th scope="col">Chamadas de IA</th><th scope="col">Tokens</th><th scope="col">Armazenamento (MB)</th><th scope="col">Admissões</th><th scope="col">Custo</th></tr></thead>
+  <tbody>
+  {% for l in uso.linhas|reverse %}
+  <tr{% if l.atual %} class="atual"{% endif %}><th scope="row">{{ l.mes }}{% if l.atual %} <span class="tag">atual</span>{% endif %}</th>
+    <td>{{ l.chamadas_ia }}</td><td>{{ '{:,}'.format(l.tokens).replace(',', '.') }}</td><td>{{ l.armazenamento_mb }}</td><td>{{ l.admissoes }}</td><td>R$ {{ '%.2f'|format(l.custo_reais)|replace('.', ',') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
