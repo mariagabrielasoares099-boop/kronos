@@ -43,7 +43,7 @@ SLA_LABELS = {"atrasado": "Atrasado", "vencendo": "Vence em 24h", "no_prazo": "N
 def create_app(
     settings: Settings | None = None, gateway: Gateway | None = None, api: ApiClient | None = None,
     conhecimento: BaseConhecimento | None = None, ollama: OllamaClient | None = None,
-    medidor: MedidorUso | None = None,
+    medidor: MedidorUso | None = None, conhecimento_pasta: Path | None = None,
 ) -> FastAPI:
     cfg = settings or load_settings()
     expo = cfg.demo_mode and cfg.expo_login  # login de teste para exposicao (so com dados ficticios)
@@ -586,7 +586,8 @@ def create_app(
              carregar_chamado=carregar_chamado, contexto_detalhe=contexto_detalhe,
              chamar_equipe=chamar_equipe, portal_api=portal_api, gw=gw)
     mount_apoio(app, render=render, token_equipe=token_equipe, base=conhecimento or BaseConhecimento(),
-                ollama=ollama or cliente_de(cfg), medidor=medidor or MedidorUso(), limiter=limiter)
+                ollama=ollama or cliente_de(cfg), medidor=medidor or MedidorUso(), limiter=limiter,
+                pasta=conhecimento_pasta)
     return app
 
 

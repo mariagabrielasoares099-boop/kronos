@@ -190,6 +190,12 @@ class BaseConhecimento:
             t, e = c.execute("SELECT COUNT(*), COUNT(emb) FROM trechos").fetchone()
         return {"fontes": f, "trechos": t, "com_embeddings": e}
 
+    def fontes(self) -> list[dict]:
+        """Documentos na base: [{fonte, trechos, com_vetor}] em ordem alfabetica."""
+        with self._con() as c:
+            linhas = c.execute("SELECT fonte, COUNT(*), COUNT(emb) FROM trechos GROUP BY fonte ORDER BY fonte").fetchall()
+        return [{"fonte": f, "trechos": t, "com_vetor": e} for f, t, e in linhas]
+
     # ---- busca ----
     def buscar(self, pergunta: str, k: int = 4, ollama=None) -> list[Trecho]:
         with self._con() as c:

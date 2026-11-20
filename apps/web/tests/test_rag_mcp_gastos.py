@@ -130,7 +130,7 @@ def test_ollama_embed_valida_resposta():
 
 
 # ---------- telas ----------
-def app_demo(**kw):
+def app_demo(**kw):  # kw: conhecimento, ollama, medidor, conhecimento_pasta
     cfg = Settings("", True, "s" * 32, 30, 60)
     return TestClient(create_app(cfg, gateway=DemoGateway(), **kw))
 
@@ -287,3 +287,45 @@ def test_pdf_que_deixa_de_ser_legivel_sai_da_base(tmp_path):
     p.write_bytes(b"lixo")
     r = b.ingerir_pasta(tmp_path)
     assert r["removidos"] == 1 and b.contagem()["fontes"] == 0
+
+
+# ---------- abas Ingestao e MCP ----------
+def test_aba_ingestao_lista_documentos_e_reingere_pela_tela(tmp_path):
+    (tmp_path / "ferias.md").write_text("Politica de ferias: trinta dias por ano.", encoding="utf-8")
+    (tmp_path / "ruim.pdf").write_bytes(b"lixo")
+    base = BaseConhecimento(":memory:")
+    c = app_demo(conhecimento=base, ollama=ollama_fora(), conhecimento_pasta=tmp_path)
+    vazia = c.get("/rh/conhecimento?aba=ingestao").text
+    assert "Nenhum documento ingerido" in vazia and 'aria-current="page">Ingestão' in vazia and "indisponível" in vazia
+    r = c.post("/rh/conhecimento/ingerir")
+    assert r.status_code == 200 and "1 novo(s)" in r.text and "ruim.pdf" in r.text and "ilegivel" in r.text
+    assert base.contagem()["fontes"] == 1
+    assert "ferias.md" in c.get("/rh/conhecimento?aba=ingestao").text
+    assert "0 novo(s)" in c.post("/rh/conhecimento/ingerir").text and "1 sem mudança" in c.post("/rh/conhecimento/ingerir").text
+
+
+def test_aba_ingestao_com_pasta_inexistente_desativa_o_botao(tmp_path):
+    c = app_demo(conhecimento=BaseConhecimento(":memory:"), ollama=ollama_fora(), conhecimento_pasta=tmp_path / "nao-existe")
+    html = c.get("/rh/conhecimento?aba=ingestao").text
+    assert "disabled" in html and "não encontrada" in html
+    assert c.post("/rh/conhecimento/ingerir").status_code == 200  # nao quebra: ingere zero arquivos
+
+
+def test_aba_mcp_mostra_ferramentas_e_configuracao():
+    html = app_demo(conhecimento=BaseConhecimento(":memory:"), ollama=ollama_fora()).get("/rh/conhecimento?aba=mcp").text
+    for f in FERRAMENTAS:
+        assert f"<code>{f['name']}</code>" in html
+    assert "claude mcp list" in html and "mcp_kronos.py" in html and "somente leitura" in html
+
+
+def test_aba_invalida_e_recusada_e_a_aba_padrao_continua_perguntar():
+    c = app_demo(conhecimento=BaseConhecimento(":memory:"), ollama=ollama_fora())
+    assert c.get("/rh/conhecimento?aba=hack").status_code == 422
+    assert 'name="pergunta"' in c.get("/rh/conhecimento").text
+
+
+def test_ingestao_pela_tela_exige_login_no_modo_exposicao():
+    cfg = Settings("", True, "s" * 32, 30, 60, expo_login=True)
+    c = TestClient(create_app(cfg, gateway=DemoGateway(), conhecimento=BaseConhecimento(":memory:")), follow_redirects=False)
+    assert c.post("/rh/conhecimento/ingerir").status_code == 303
+    assert c.get("/rh/conhecimento?aba=ingestao").status_code == 303

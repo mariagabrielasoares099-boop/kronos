@@ -244,3 +244,27 @@ main#conteudo { scroll-margin-top:80px; }
 .ap-tabela th:first-child { text-align:left; }
 .ap-tabela thead th { font-size:13px; color:var(--muted); font-weight:600; }
 .ap-tabela tr.atual { background:#f3f7ff; }
+
+/* Abas da base de conhecimento */
+.ap-abas { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 16px; border-bottom:1px solid var(--line); }
+.ap-abas a { padding:10px 16px; text-decoration:none; font-weight:600; font-size:14px; color:var(--muted); border-bottom:3px solid transparent; margin-bottom:-1px; }
+.ap-abas a:hover { color:var(--ink); }
+.ap-abas a[aria-current="page"] { color:var(--brand-dark); border-bottom-color:var(--brand); }
+.ap-status { list-style:none; margin:0 0 14px; padding:0; display:grid; gap:8px; }
+.ap-status li { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:14px; }
+.ap-acoes { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:8px 0 18px; }
+.ap-ferramentas { padding-left:20px; display:grid; gap:8px; font-size:14px; }
+.ap-passos { padding-left:20px; display:grid; gap:6px; font-size:14px; }
+.ap-codigo { background:var(--ink); color:#dbe7ff; padding:14px 16px; border-radius:10px; font-size:13px; overflow-x:auto; max-width:720px; }
+code { overflow-wrap:anywhere; }
+button:disabled { opacity:.55; cursor:not-allowed; }
+
+/* Celular: alvos de toque confortaveis (44px) e texto minimo de 12px */
+small { font-size:max(12px, .8333em); }
+label.check input[type=checkbox] { flex:none; width:24px; height:24px; margin:0; accent-color:var(--brand); }
+@media (max-width: 760px) {
+  button, .bar-link, .back, .side nav a, .ap-abas a, input:not([type=checkbox]):not([type=file]), select { min-height:44px; }
+  .back { display:inline-flex; align-items:center; }
+  .bar-link { display:inline-flex; align-items:center; }
+  label.check { align-items:flex-start; padding:4px 0; }
+}

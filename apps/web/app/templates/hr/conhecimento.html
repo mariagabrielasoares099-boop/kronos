@@ -2,10 +2,17 @@
 {% block title %}Base de conhecimento · KRONOS{% endblock %}
 {% block content %}
 <h1>Base de conhecimento</h1>
-<p class="lead">Pergunte sobre as políticas do RH (documentos .md, .txt e .pdf). A resposta usa só os documentos ingeridos e cita a fonte. A decisão continua sendo de uma pessoa.</p>
 <p class="muted">{{ contagem.fontes }} documento(s), {{ contagem.trechos }} trecho(s){% if contagem.trechos and contagem.com_embeddings == contagem.trechos %}, busca por significado (Ollama){% elif contagem.trechos %}, busca por palavras-chave{% endif %}.</p>
+<nav class="ap-abas" aria-label="Seções da base de conhecimento">
+  <a href="/rh/conhecimento"{% if aba == 'perguntar' %} aria-current="page"{% endif %}>Perguntar</a>
+  <a href="/rh/conhecimento?aba=ingestao"{% if aba == 'ingestao' %} aria-current="page"{% endif %}>Ingestão</a>
+  <a href="/rh/conhecimento?aba=mcp"{% if aba == 'mcp' %} aria-current="page"{% endif %}>MCP do KRONOS</a>
+</nav>
+
+{% if aba == 'perguntar' %}
+<p class="lead">Pergunte sobre as políticas do RH (documentos .md, .txt e .pdf). A resposta usa só os documentos ingeridos e cita a fonte. A decisão continua sendo de uma pessoa.</p>
 {% if not contagem.trechos %}
-<p class="alerta info">A base está vazia. Rode <code>python -m app.services.rag_ingest</code> na pasta <code>apps/web</code> para ingerir <code>docs/conhecimento</code>.</p>
+<p class="alerta info">A base está vazia. Abra a aba <a href="/rh/conhecimento?aba=ingestao">Ingestão</a> e clique em "Ingerir agora".</p>
 {% endif %}
 <form method="post" action="/rh/conhecimento" class="form ap-form">
   <label for="pergunta">Pergunta
@@ -28,5 +35,59 @@
   </ol>
   {% endif %}
 </section>
+{% endif %}
+
+{% elif aba == 'ingestao' %}
+<p class="lead">Ingestão é o passo que lê os documentos da pasta <code>{{ pasta_nome }}</code> e os prepara para a busca. Documentos que não mudaram são pulados.</p>
+<ul class="ap-status">
+  <li><strong>Pasta</strong> {% if pasta_existe %}<span class="tag lime">encontrada</span>{% else %}<span class="tag">não encontrada</span>{% endif %}</li>
+  <li><strong>Ollama</strong> {% if ollama_ok %}<span class="tag lime">disponível: busca por significado</span>{% else %}<span class="tag">indisponível: busca por palavras-chave</span>{% endif %}</li>
+  <li><strong>Formatos</strong> <span class="muted">.md, .txt e .pdf com texto (PDF escaneado é ignorado)</span></li>
+</ul>
+<form method="post" action="/rh/conhecimento/ingerir" class="ap-acoes">
+  <button type="submit"{% if not pasta_existe %} disabled{% endif %}>Ingerir agora</button>
+  <span class="muted">Para adicionar documentos, copie os arquivos para <code>{{ pasta_nome }}</code> e clique no botão.</span>
+</form>
+{% if ingestao %}
+<section class="card ap-resposta" role="status">
+  <h2>Resultado</h2>
+  <p>{{ ingestao.novos }} novo(s), {{ ingestao.atualizados }} atualizado(s), {{ ingestao.iguais }} sem mudança, {{ ingestao.removidos }} removido(s). {{ ingestao.trechos }} trecho(s) gravado(s){% if ingestao.sem_embeddings %}, {{ ingestao.sem_embeddings }} sem vetor (Ollama indisponível){% endif %}.</p>
+  {% if ingestao.ignorados %}
+  <h3>Arquivos ignorados</h3>
+  <ul>{% for i in ingestao.ignorados %}<li><strong>{{ i.fonte }}</strong>: {{ i.motivo }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endif %}
+<h2>Documentos na base</h2>
+{% if fontes %}
+<div class="ap-tabela" role="region" aria-label="Documentos ingeridos" tabindex="0">
+<table>
+  <caption class="sr-only">Documentos ingeridos</caption>
+  <thead><tr><th scope="col">Documento</th><th scope="col">Trechos</th><th scope="col">Busca</th></tr></thead>
+  <tbody>{% for f in fontes %}<tr><th scope="row">{{ f.fonte }}</th><td>{{ f.trechos }}</td><td>{{ 'significado' if f.com_vetor == f.trechos else 'palavras-chave' }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">Nenhum documento ingerido ainda.</p>
+{% endif %}
+
+{% else %}
+<p class="lead">O MCP do KRONOS deixa o Claude Code consultar vagas, chamados e esta base de conhecimento. Ele roda no computador de quem usa o Claude Code, não neste servidor web.</p>
+<ul class="ap-status">
+  <li><strong>Acesso</strong> <span class="tag lime">somente leitura</span></li>
+  <li><strong>Dados</strong> <span class="muted">fictícios do modo demonstração</span></li>
+</ul>
+<h2>Ferramentas</h2>
+<ul class="ap-ferramentas">
+  {% for f in ferramentas %}<li><code>{{ f.nome }}</code> <span class="muted">{{ f.descricao }}</span></li>{% else %}<li class="muted">Lista indisponível: o servidor não foi iniciado a partir de <code>apps/web</code>.</li>{% endfor %}
+</ul>
+<h2>Como conectar</h2>
+<ol class="ap-passos">
+  <li>Abra o Claude Code na pasta do projeto. O arquivo <code>.mcp.json</code> da raiz já registra o servidor <code>kronos</code>.</li>
+  <li>Aprove o servidor quando o Claude Code pedir e confira com <code>claude mcp list</code>.</li>
+  <li>Se o <code>python</code> do PATH não for o do projeto, troque <code>command</code> pelo caminho do <code>python.exe</code> do <code>.venv</code>.</li>
+</ol>
+<pre class="ap-codigo" tabindex="0">{{ config_mcp }}</pre>
+<p class="muted">Detalhes em <code>Passo a Passo/04-ingestao-e-mcp.md</code>.</p>
 {% endif %}
 {% endblock %}
