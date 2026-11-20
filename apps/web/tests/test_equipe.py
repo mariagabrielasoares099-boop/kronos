@@ -69,7 +69,7 @@ class FakeApi:
             self.decisoes.append(corpo)
             if self.status_doc != "PENDENTE":
                 return httpx.Response(409)
-            self.status_doc, self.motivo_doc = corpo["status"], corpo.get("motivo")
+            self.status_doc, self.motivo_doc = {"APROVAR": "APROVADO", "RECUSAR": "RECUSADO"}[corpo["acao"]], corpo.get("motivo")
             return httpx.Response(200, json={})
         if path == f"/chamados/{CHAMADO_ID}/atribuicao" and m == "POST":
             self.atribuicoes.append(json.loads(req.content))
@@ -223,7 +223,7 @@ def test_aprovar_e_recusar_documento_gravam_na_api_e_recarregam_o_estado():
     assert "mínimo 3 caracteres" in r.text and fake.decisoes == []  # nem chega a API
     r = c.post(f"/painel/documentos/{DOC_ID}/decisao",
                data={"acao": "recusar", "motivo": " Foto ilegivel ", "protocolo": PROTOCOLO})
-    assert fake.decisoes == [{"status": "RECUSADO", "motivo": "Foto ilegivel"}]
+    assert fake.decisoes == [{"acao": "RECUSAR", "motivo": "Foto ilegivel"}]
     assert "Recusado" in r.text and "Foto ilegivel" in r.text
     r = c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "aprovar", "protocolo": PROTOCOLO})
     assert "já foi decidido" in r.text  # a API respondeu 409

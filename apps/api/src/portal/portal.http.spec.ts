@@ -210,8 +210,8 @@ describe.skipIf(!ADMIN || !APP)('Portal do candidato: entrada + upload ponta a p
     const lista = await http.get(`/chamados/${chamado}/documentos`).set('Authorization', bearer).expect(200);
     expect(lista.body.documentos).toHaveLength(1);
     expect(lista.body.documentos[0]).toMatchObject({ id: enviado.body.id, tipo: 'RG', status: 'PENDENTE', mime: 'application/pdf' });
-    expect(lista.body.checklist.find((i: { tipo: string }) => i.tipo === 'RG')).toMatchObject({ enviado: true, status: 'PENDENTE' });
-    expect(lista.body.checklist.find((i: { tipo: string }) => i.tipo === 'CPF')).toMatchObject({ enviado: false, status: 'FALTANDO' });
+    expect(lista.body.checklist.find((i: { tipo: string }) => i.tipo === 'RG')).toMatchObject({ situacao: 'PENDENTE' });
+    expect(lista.body.checklist.find((i: { tipo: string }) => i.tipo === 'CPF')).toMatchObject({ situacao: 'FALTANDO' });
     // Persistido no disco (qualquer arquivo sob o diretorio de storage do teste).
     const arquivos = (await readdir(dir, { recursive: true, withFileTypes: true })).filter((e) => e.isFile());
     expect(arquivos).toHaveLength(1);
