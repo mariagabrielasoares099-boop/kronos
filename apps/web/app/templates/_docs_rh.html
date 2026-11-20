@@ -14,7 +14,7 @@
     <li class="item item-{{ item.status|lower }}">
       <div class="item-topo">
         <strong>{{ tipos[item.tipo] }}</strong>
-        <span class="badge badge-{{ item.status|lower }}">{{ {'FALTANDO': 'Faltando', 'PENDENTE': 'Aguardando decisao', 'APROVADO': 'Aprovado', 'RECUSADO': 'Recusado'}[item.status] }}</span>
+        <span class="badge badge-{{ item.status|lower }}">{{ {'FALTANDO': 'Faltando', 'PENDENTE': 'Aguardando decisão', 'APROVADO': 'Aprovado', 'RECUSADO': 'Recusado'}[item.status] }}</span>
       </div>
       {% if item.doc and api %}<p><a href="/painel/chamado/{{ chamado.protocolo }}/documentos/{{ item.doc.id }}/arquivo">Baixar arquivo</a></p>{% endif %}
       {% if item.doc and item.doc.status == 'RECUSADO' %}<p class="muted">Motivo: {{ item.doc.motivo }}</p>{% endif %}

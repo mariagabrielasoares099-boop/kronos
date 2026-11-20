@@ -10,6 +10,14 @@ class Settings:
     session_secret: str
     rate_limit_max: int
     rate_limit_window_s: int
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2"
+    ollama_timeout_s: float = 60.0
+    ollama_embed_model: str = "nomic-embed-text"
+    # Login de teste para exposicao: so no modo demo (dados ficticios). Desligado por padrao.
+    expo_login: bool = False
+    expo_email: str = "equipe.teste@exemplo.test"
+    expo_senha: str = "kronos-expo-2026"
 
 
 def load_settings(env: dict[str, str] | None = None) -> Settings:
@@ -27,4 +35,11 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         session_secret=secret,
         rate_limit_max=int(e.get("RATE_LIMIT_MAX", "10")),
         rate_limit_window_s=int(e.get("RATE_LIMIT_WINDOW_S", "60")),
+        ollama_url=e.get("OLLAMA_URL", "http://localhost:11434").rstrip("/"),
+        ollama_model=e.get("OLLAMA_MODEL", "llama3.2"),
+        ollama_timeout_s=float(e.get("OLLAMA_TIMEOUT_S", "60")),
+        ollama_embed_model=e.get("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
+        expo_login=demo and e.get("EXPO_LOGIN", "false").lower() == "true",
+        expo_email=e.get("EXPO_EMAIL", "equipe.teste@exemplo.test").strip(),
+        expo_senha=e.get("EXPO_SENHA", "kronos-expo-2026"),
     )

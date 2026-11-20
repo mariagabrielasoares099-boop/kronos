@@ -65,8 +65,8 @@ def test_painel_exige_login_fora_do_modo_demo():
 
 def test_validacao_htmx_do_cpf():
     c = make()
-    assert "CPF valido" in c.post("/validar/cpf", data={"cpf": "529.982.247-25"}).text
-    assert "CPF invalido" in c.post("/validar/cpf", data={"cpf": "123"}).text
+    assert "CPF válido" in c.post("/validar/cpf", data={"cpf": "529.982.247-25"}).text
+    assert "CPF inválido" in c.post("/validar/cpf", data={"cpf": "123"}).text
 
 
 def test_rate_limiter_janela():
@@ -105,7 +105,7 @@ def test_upload_fora_do_demo_nao_confirma_envio_sem_sessao():
 
 def test_formulario_avisa_que_demo_nao_salva_documentos():
     c = make()
-    assert "O conteudo nao e salvo nem enviado ao RH" in c.get("/chamado/ADM-2026-000001").text
+    assert "O conteúdo não é salvo nem enviado ao RH" in c.get("/chamado/ADM-2026-000001").text
 
 
 def _chamado(c):
@@ -118,14 +118,14 @@ def test_upload_valido_marca_item_em_analise():
     assert "Faltando" in c.get(url).text
     r = c.post(url + "/documentos", data={"tipo": "RG"}, files={"arquivo": ("rg.png", PNG, "image/png")})
     assert r.status_code == 303 and r.headers["location"] == url
-    assert "Em analise" in c.get(url).text
+    assert "Em análise" in c.get(url).text
 
 
 def test_upload_confere_conteudo_e_nao_a_extensao():
     c = make()
     url = _chamado(c)
     r = c.post(url + "/documentos", data={"tipo": "RG"}, files={"arquivo": ("rg.png", b"MZ nao e imagem", "image/png")})
-    assert r.status_code == 422 and "Tipo nao permitido" in r.text
+    assert r.status_code == 422 and "Tipo não permitido" in r.text
     assert "em analise" not in c.get(url).text
 
 
@@ -211,7 +211,7 @@ def test_candidato_envia_documento_e_ve_o_checklist():
     assert "Faltando" in c.get(f"/chamado/{p}").text
     r = upload(c, p, PDF)
     assert r.status_code == 303
-    assert "Em analise" in c.get(f"/chamado/{p}").text
+    assert "Em análise" in c.get(f"/chamado/{p}").text
 
 
 @pytest.mark.parametrize("conteudo", [b"MZ\x90\x00", b"<html><script>", b""])
@@ -219,14 +219,14 @@ def test_upload_rejeita_conteudo_invalido_mesmo_com_nome_pdf(conteudo):
     c = make()
     p = c.post("/vagas/v1/candidatar", data=VALID).headers["location"].rsplit("/", 1)[1]
     assert upload(c, p, conteudo, nome="inocente.pdf").status_code == 422
-    assert "Em analise" not in c.get(f"/chamado/{p}").text
+    assert "Em análise" not in c.get(f"/chamado/{p}").text
 
 
 def test_upload_acima_de_5mb_responde_413_como_a_api():
     c = make()
     p = c.post("/vagas/v1/candidatar", data=VALID).headers["location"].rsplit("/", 1)[1]
     assert upload(c, p, PDF + b"x" * (5 * 1024 * 1024), nome="grande.pdf").status_code == 413
-    assert "Em analise" not in c.get(f"/chamado/{p}").text
+    assert "Em análise" not in c.get(f"/chamado/{p}").text
 
 
 def test_upload_nao_ecoa_o_nome_do_arquivo():
@@ -246,7 +246,7 @@ def test_upload_tipo_invalido_e_chamado_inexistente():
 def test_detalhe_do_rh_mostra_documentos_e_linha_do_tempo():
     r = make().get("/painel/chamado/ADM-2026-000001")
     assert r.status_code == 200
-    assert "Aguardando decisao" in r.text and "Linha do tempo" in r.text and "Documentos recebidos" in r.text
+    assert "Aguardando decisão" in r.text and "Linha do tempo" in r.text and "Documentos recebidos" in r.text
 
 
 def test_rh_aprova_e_recusa_com_motivo_via_htmx():
@@ -257,7 +257,7 @@ def test_rh_aprova_e_recusa_com_motivo_via_htmx():
     assert "motivo da recusa" in sem_motivo.text and "Recusado" not in sem_motivo.text
     rec = c.post("/painel/documentos/d2/decisao", data={"acao": "recusar", "motivo": "Foto ilegivel"})
     assert "Recusado" in rec.text and "Foto ilegivel" in rec.text
-    assert "ja foi decidido" in c.post("/painel/documentos/d1/decisao", data={"acao": "recusar", "motivo": "tarde demais"}).text
+    assert "já foi decidido" in c.post("/painel/documentos/d1/decisao", data={"acao": "recusar", "motivo": "tarde demais"}).text
 
 
 def test_decisao_valida_acao_e_documento():

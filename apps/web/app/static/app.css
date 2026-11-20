@@ -103,10 +103,11 @@ button:hover { background:var(--brand-dark); }
 .section-head h2 { margin:0; font-size:20px; }
 .vaga-layout { display:grid; grid-template-columns:minmax(0, 1.1fr) minmax(300px, 520px); gap:28px; align-items:start; }
 .vaga-layout .form { max-width:none; position:sticky; top:84px; }
-.back { display:inline-block; margin-bottom:12px; text-decoration:none; font-weight:600; font-size:14px; }
+.back { display:inline-block; margin-bottom:12px; text-decoration:underline; text-underline-offset:3px; font-weight:600; font-size:14px; }
 
 /* Acompanhamento (candidato): etapas */
-.stepper { list-style:none; margin:18px 0 8px; padding:16px 18px; display:flex; gap:0; overflow-x:auto; background:var(--card); border:1px solid var(--line);
+.stepper-scroll { margin:18px 0 8px; overflow-x:auto; padding:0 2px 8px; }
+.stepper { list-style:none; margin:0; min-width:max-content; padding:16px 18px; display:flex; gap:0; background:var(--card); border:1px solid var(--line);
   border-radius:14px; box-shadow:var(--shadow); counter-reset:etapa; }
 .stepper li { flex:1 0 96px; position:relative; text-align:center; font-size:12px; color:var(--muted); padding-top:34px; min-width:88px; }
 .stepper li::before { counter-increment:etapa; content:counter(etapa); position:absolute; top:0; left:50%; transform:translateX(-50%); width:26px; height:26px; border-radius:50%;
@@ -220,3 +221,26 @@ button:hover { background:var(--brand-dark); }
 @media (prefers-reduced-motion: no-preference) { .ticket, .vaga, .side nav a, button, .bar-link { transition:background .15s, border-color .15s, transform .15s, box-shadow .15s; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } .vaga:hover, .ticket:hover { transform:none; } }
 .sem-margem { margin:0; }
+
+/* Link de salto para teclado: visivel so ao receber foco */
+.skip-link { position:absolute; left:8px; top:-48px; z-index:100; background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px; font-weight:600; text-decoration:none; }
+.skip-link:focus { top:8px; }
+main:focus { outline:none; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+main#conteudo { scroll-margin-top:80px; }
+
+/* Base de conhecimento e uso/custos */
+.ap-form { max-width:720px; }
+.ap-resposta { margin-top:20px; max-width:900px; }
+.ap-texto { font-size:16px; line-height:1.6; margin:0 0 8px; }
+.ap-fontes { padding-left:20px; display:grid; gap:12px; }
+.ap-fontes blockquote { margin:6px 0 0; padding:8px 12px; border-left:3px solid var(--line); background:var(--bg); color:var(--muted); font-size:14px; white-space:pre-line; }
+.ap-cotas { list-style:none; margin:0 0 8px; padding:0; display:grid; gap:14px; max-width:720px; }
+.ap-cota-topo { display:flex; justify-content:space-between; gap:12px; font-size:14px; margin-bottom:4px; }
+.ap-barra { width:100%; height:14px; }
+.ap-tabela { overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); }
+.ap-tabela table { width:100%; border-collapse:collapse; font-size:14px; }
+.ap-tabela th, .ap-tabela td { padding:10px 14px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap; }
+.ap-tabela th:first-child { text-align:left; }
+.ap-tabela thead th { font-size:13px; color:var(--muted); font-weight:600; }
+.ap-tabela tr.atual { background:#f3f7ff; }

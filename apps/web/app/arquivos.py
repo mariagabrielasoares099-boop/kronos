@@ -30,5 +30,5 @@ def validar_arquivo(b: bytes, maximo: int = TAMANHO_MAXIMO_BYTES) -> str:
         raise ArquivoInvalido("Arquivo acima de 5 MB.", 413)
     mime = detectar_mime(b)
     if mime is None:
-        raise ArquivoInvalido("Tipo nao permitido: envie JPG, PNG ou PDF.")
+        raise ArquivoInvalido("Tipo não permitido: envie JPG, PNG ou PDF.")
     return mime

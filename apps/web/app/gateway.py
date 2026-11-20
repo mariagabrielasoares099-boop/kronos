@@ -13,7 +13,7 @@ STATUS_LABELS = {
     "ENTREVISTA": "Entrevista",
     "APROVADO": "Aprovado",
     "AGUARDANDO_CANDIDATO": "Aguardando candidato",
-    "VALIDACAO_DP": "Validacao do DP",
+    "VALIDACAO_DP": "Validação do DP",
     "ASSINATURA": "Assinatura",
     "ENVIO_ERP": "Envio ao ERP",
     "ADMITIDO": "Admitido",
@@ -24,7 +24,7 @@ STATUSES = list(STATUS_LABELS)
 TIPOS_DOCUMENTO = {
     "RG": "RG",
     "CPF": "CPF",
-    "COMPROVANTE_RESIDENCIA": "Comprovante de residencia",
+    "COMPROVANTE_RESIDENCIA": "Comprovante de residência",
     "CTPS": "CTPS",
     "FOTO_3X4": "Foto 3x4",
     "OUTRO": "Outro",
@@ -39,7 +39,7 @@ PROXIMO = {
 ACAO_AVANCAR = {
     "TRIAGEM": "Aprovar triagem", "ENTREVISTA": "Aprovar candidato", "APROVADO": "Pedir documentos",
     "AGUARDANDO_CANDIDATO": "Documentos recebidos", "VALIDACAO_DP": "Validar e seguir para assinatura",
-    "ASSINATURA": "Enviar ao ERP", "ENVIO_ERP": "Confirmar admissao",
+    "ASSINATURA": "Enviar ao ERP", "ENVIO_ERP": "Confirmar admissão",
 }
 
 
@@ -92,8 +92,12 @@ class DemoGateway:
         self._vagas = {
             "v1": Vaga("v1", "Auxiliar Administrativo", "Empresa Exemplo Ltda", "Fortaleza/CE",
                        "Rotinas administrativas e atendimento."),
-            "v2": Vaga("v2", "Operador de Logistica", "Empresa Exemplo Ltda", "Caucaia/CE",
-                       "Separacao, conferencia e expedicao. Uso de EPI."),
+            "v2": Vaga("v2", "Operador de Logística", "Empresa Exemplo Ltda", "Caucaia/CE",
+                       "Separação, conferência e expedição. Uso de EPI."),
+            "v3": Vaga("v3", "Assistente de RH", "Empresa Exemplo Ltda", "Fortaleza/CE",
+                       "Apoio a recrutamento, admissão e rotinas de departamento pessoal."),
+            "v4": Vaga("v4", "Motorista Entregador", "Empresa Exemplo Ltda", "Maracanaú/CE",
+                       "Entregas urbanas com veiculo da empresa. CNH categoria B."),
         }
         self._chamados: dict[str, Chamado] = {}
         self._seq = 0
@@ -115,6 +119,39 @@ class DemoGateway:
             self.enviar_documento(ana.protocolo, tipo, f"{tipo.lower()}.pdf")
         ana.historico += [("APROVADO", "Entrevista aprovada"), ("AGUARDANDO_CANDIDATO", "Documentos solicitados"),
                           ("VALIDACAO_DP", "Documentos recebidos")]
+        self._semear_documentos_ficticios(agora)
+
+    def _semear_documentos_ficticios(self, agora: datetime) -> None:
+        """Candidatos e documentos FICTICIOS (sem arquivo real) para mostrar o fluxo nas vagas."""
+        def cand(vaga, nome, st, resp, prazo, docs, historico):
+            c = self.criar_chamado(vaga, nome)
+            c.status, c.responsavel, c.prazo_sla = st, resp, prazo
+            c.historico += historico
+            for tipo, status, motivo in docs:
+                d = self.enviar_documento(c.protocolo, tipo, f"{tipo.lower()}.pdf")
+                d.status, d.motivo = status, motivo
+
+        pedidos = [("APROVADO", "Entrevista aprovada"), ("AGUARDANDO_CANDIDATO", "Documentos solicitados")]
+        cand("v2", "Fernanda Alves", "AGUARDANDO_CANDIDATO", "Diego (RH)", agora + timedelta(days=2),
+             [("RG", "APROVADO", None), ("CPF", "PENDENTE", None)], pedidos)
+        cand("v2", "Gustavo Pires", "VALIDACAO_DP", "Carla (DP)", agora + timedelta(hours=6),
+             [("RG", "APROVADO", None), ("CPF", "RECUSADO", "Foto ilegivel"), ("COMPROVANTE_RESIDENCIA", "PENDENTE", None)],
+             pedidos + [("VALIDACAO_DP", "Documentos recebidos")])
+        cand("v2", "Helena Castro", "ASSINATURA", "Carla (DP)", agora + timedelta(days=1),
+             [("RG", "APROVADO", None), ("CPF", "APROVADO", None), ("COMPROVANTE_RESIDENCIA", "APROVADO", None),
+              ("CTPS", "APROVADO", None), ("FOTO_3X4", "APROVADO", None)],
+             pedidos + [("VALIDACAO_DP", "Documentos recebidos"), ("ASSINATURA", "Documentos validados")])
+        cand("v3", "Igor Barros", "ENTREVISTA", "Diego (RH)", agora + timedelta(days=2), [], [])
+        cand("v3", "Juliana Teixeira", "VALIDACAO_DP", "Carla (DP)", agora - timedelta(hours=2),
+             [("RG", "PENDENTE", None), ("CPF", "PENDENTE", None), ("COMPROVANTE_RESIDENCIA", "PENDENTE", None)],
+             pedidos + [("VALIDACAO_DP", "Documentos recebidos")])
+        cand("v4", "Lucas Ferraz", "AGUARDANDO_CANDIDATO", None, agora + timedelta(days=4),
+             [("RG", "APROVADO", None)], pedidos)
+        cand("v4", "Marina Duarte", "ENVIO_ERP", "Carla (DP)", agora + timedelta(hours=20),
+             [("RG", "APROVADO", None), ("CPF", "APROVADO", None), ("COMPROVANTE_RESIDENCIA", "APROVADO", None),
+              ("OUTRO", "APROVADO", None)],
+             pedidos + [("VALIDACAO_DP", "Documentos recebidos"), ("ASSINATURA", "Documentos validados"),
+                        ("ENVIO_ERP", "Contrato assinado")])
 
     def listar_vagas(self) -> list[Vaga]:
         return list(self._vagas.values())

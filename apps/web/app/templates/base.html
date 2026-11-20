@@ -1,6 +1,6 @@
 <!doctype html>
 {% set path = request.url.path %}
-{% set rh = path.startswith('/painel') %}
+{% set rh = path.startswith('/painel') or path.startswith('/rh') %}
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
@@ -10,14 +10,16 @@
   <link rel="icon" type="image/png" href="/static/img/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
+  {% block head_extra %}{% endblock %}
 </head>
 <body class="{{ 'area-rh' if rh else 'area-candidato' }}">
-  {% if demo %}<div class="demo">Modo demonstracao: dados ficticios, sem autenticacao.</div>{% endif %}
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+  {% if demo %}<div class="demo" role="region" aria-label="Aviso">{% if expo %}Modo exposição: dados fictícios, com login de teste na área do RH.{% else %}Modo demonstração: dados fictícios, sem autenticação.{% endif %}</div>{% endif %}
   <header class="bar">
-    <a href="{{ '/painel/fila' if rh else '/' }}" class="brand" aria-label="KRONOS, pagina inicial"><img src="/static/img/kronos-logo.png" alt="KRONOS" width="144" height="40"></a>
+    <a href="{{ '/painel/fila' if rh else '/' }}" class="brand" aria-label="KRONOS, página inicial"><img src="/static/img/kronos-logo.png" alt="KRONOS" width="144" height="40"></a>
     {% if rh %}
     <span class="crumb">Painel do RH</span>
-    {% if demo %}
+    {% if demo and not expo %}
     <span class="user"><span class="avatar" aria-hidden="true">DR</span>Diego (RH)</span>
     {% else %}
     <span class="user"><span class="avatar" aria-hidden="true">RH</span>Equipe
@@ -25,23 +27,26 @@
     {% endif %}
     {% else %}
     <nav class="bar-nav" aria-label="Portal"><a class="bar-link" href="/">Vagas abertas</a></nav>
-    {% if demo %}<a class="bar-link cta" href="/painel/fila">Area do RH</a>{% endif %}
+    {% if demo %}<a class="bar-link cta" href="/painel/fila">Área do RH</a>{% endif %}
     {% endif %}
   </header>
   <div class="app">
     {% if rh %}
     <aside class="side" aria-label="Menu principal">
-      <div class="side-title">Recrutamento e Admissao</div>
+      <div class="side-title">Recrutamento e Admissão</div>
       <nav>
+        <a href="/rh/dashboard" class="{{ 'on' if path.startswith('/rh') and not path.startswith('/rh/conhecimento') and not path.startswith('/rh/gastos') }}">Visão do analista</a>
         <a href="/painel/fila" class="{{ 'on' if path.startswith('/painel/fila') or path.startswith('/painel/chamado') }}">Fila de chamados</a>
         <a href="/painel" class="{{ 'on' if path == '/painel' }}">Quadro de etapas</a>
+        <a href="/rh/conhecimento" class="{{ 'on' if path.startswith('/rh/conhecimento') }}">Base de conhecimento</a>
+        <a href="/rh/gastos" class="{{ 'on' if path.startswith('/rh/gastos') }}">Uso e custos</a>
         {% if demo %}<a href="/vagas">Portal de vagas</a>{% endif %}
       </nav>
     </aside>
     {% endif %}
     <div class="content">
-      <main>{% block content %}{% endblock %}</main>
-      <footer>Seus dados sao tratados conforme a LGPD. A empresa e a controladora.</footer>
+      <main id="conteudo" tabindex="-1">{% block content %}{% endblock %}</main>
+      <footer>Seus dados são tratados conforme a LGPD. A empresa é a controladora.</footer>
     </div>
   </div>
 </body>

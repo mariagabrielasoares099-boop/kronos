@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "kronos": {
+      "command": "python",
+      "args": ["apps/web/mcp_kronos.py"],
+      "env": {}
+    }
+  }
+}

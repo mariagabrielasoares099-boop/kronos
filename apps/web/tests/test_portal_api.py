@@ -93,7 +93,7 @@ def test_pedir_link_manda_so_digitos_a_api_e_nao_cria_sessao():
 def test_pedir_link_com_cpf_invalido_nem_chega_a_api():
     c, fake = make()
     r = c.post(f"/chamado/{PROTOCOLO}/link", data={"cpf": "111.111.111-11"})
-    assert r.status_code == 422 and "CPF invalido" in r.text
+    assert r.status_code == 422 and "CPF inválido" in r.text
     assert fake.chamadas == []
 
 
@@ -131,7 +131,7 @@ def test_link_so_funciona_uma_vez_e_codigo_errado_ou_mal_formado_nao_cria_sessao
     assert abrir_sessao(c).status_code == 303
     c.cookies.clear()
     r = abrir_sessao(c)  # reuso
-    assert r.status_code == 401 and "Link invalido, vencido ou ja usado" in r.text and "set-cookie" not in r.headers
+    assert r.status_code == 401 and "Link inválido, vencido ou já usado" in r.text and "set-cookie" not in r.headers
     antes = len(fake.chamadas)
     assert c.post(f"/chamado/{PROTOCOLO}/acesso/curto").status_code == 404  # fora do formato: nem chega a API
     assert c.get(f"/chamado/{PROTOCOLO}/acesso/{'<script>' * 6}").status_code == 404
@@ -148,7 +148,7 @@ def test_upload_envia_o_arquivo_a_api_com_token_e_aparece_na_listagem():
     assert envio.headers["authorization"] == f"Bearer {TOKEN}"
     assert b'name="tipo"' in envio.content and PNG in envio.content
     assert b"meu rg.png" not in envio.content  # o nome vindo do usuario nao e repassado
-    assert "Em analise" in c.get(f"/chamado/{PROTOCOLO}").text
+    assert "Em análise" in c.get(f"/chamado/{PROTOCOLO}").text
 
 
 def test_upload_sem_sessao_ou_com_arquivo_invalido_nao_chega_a_api():
@@ -158,7 +158,7 @@ def test_upload_sem_sessao_ou_com_arquivo_invalido_nao_chega_a_api():
     abrir_sessao(c)
     antes = len(fake.chamadas)
     r = c.post(f"/chamado/{PROTOCOLO}/documentos", data={"tipo": "RG"}, files={"arquivo": ("a.png", b"MZ ruim", "image/png")})
-    assert r.status_code == 422 and "Tipo nao permitido" in r.text
+    assert r.status_code == 422 and "Tipo não permitido" in r.text
     assert not any(x.method == "POST" and x.url.path.endswith("/documentos") for x in fake.chamadas[antes:])
 
 
@@ -168,7 +168,7 @@ def test_sessao_expirada_na_api_pede_novo_link_e_limpa_o_cookie():
     c.cookies.clear()
     c.cookies.set("kronos_portal", "token.vencido", path="/chamado")
     r = c.get(f"/chamado/{PROTOCOLO}")
-    assert r.status_code == 401 and "sessao expirou" in r.text and "novo link" in r.text
+    assert r.status_code == 401 and "sessão expirou" in r.text and "novo link" in r.text
     assert "kronos_portal" in r.headers["set-cookie"]
 
 

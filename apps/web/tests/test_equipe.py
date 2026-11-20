@@ -130,7 +130,7 @@ def test_login_ok_grava_cookie_httponly_e_abre_o_painel():
 def test_sem_codigo_pede_o_2fa_sem_criar_sessao():
     c, _ = make()
     r = c.post("/login", data={"email": EMAIL, "senha": SENHA})
-    assert r.status_code == 401 and "codigo do aplicativo" in r.text and "set-cookie" not in r.headers
+    assert r.status_code == 401 and "código do aplicativo" in r.text and "set-cookie" not in r.headers
     assert r.headers["cache-control"] == "no-store"
 
 
@@ -211,7 +211,7 @@ def test_sessao_vencida_na_api_volta_ao_login_e_limpa_o_cookie():
 def test_detalhe_traz_documentos_e_linha_do_tempo_da_api():
     c, _ = logado()
     r = c.get(f"/painel/chamado/{PROTOCOLO}")
-    assert r.status_code == 200 and "Ana Souza" in r.text and "Aguardando decisao" in r.text
+    assert r.status_code == 200 and "Ana Souza" in r.text and "Aguardando decisão" in r.text
     assert "Validar e seguir para assinatura" in r.text
     assert c.get("/painel/chamado/ADM-2026-999999").status_code == 404
     assert c.get("/painel/chamado/ABC").status_code == 404
@@ -220,13 +220,13 @@ def test_detalhe_traz_documentos_e_linha_do_tempo_da_api():
 def test_aprovar_e_recusar_documento_gravam_na_api_e_recarregam_o_estado():
     c, fake = logado()
     r = c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "recusar", "motivo": "ab", "protocolo": PROTOCOLO})
-    assert "minimo 3 caracteres" in r.text and fake.decisoes == []  # nem chega a API
+    assert "mínimo 3 caracteres" in r.text and fake.decisoes == []  # nem chega a API
     r = c.post(f"/painel/documentos/{DOC_ID}/decisao",
                data={"acao": "recusar", "motivo": " Foto ilegivel ", "protocolo": PROTOCOLO})
     assert fake.decisoes == [{"status": "RECUSADO", "motivo": "Foto ilegivel"}]
     assert "Recusado" in r.text and "Foto ilegivel" in r.text
     r = c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "aprovar", "protocolo": PROTOCOLO})
-    assert "ja foi decidido" in r.text  # a API respondeu 409
+    assert "já foi decidido" in r.text  # a API respondeu 409
 
 
 def test_decisao_so_vale_para_documento_do_chamado_informado():
@@ -275,7 +275,7 @@ def test_equipe_sem_atribuicao_ve_o_chamado_mas_nao_os_documentos_e_nao_recebe_5
     fake.sem_atribuicao = True
     r = c.get(f"/painel/chamado/{PROTOCOLO}/detalhe")
     assert r.status_code == 200 and "Ana Souza" in r.text and "n&atilde;o est&aacute; atribu" in r.text
-    assert "Aguardando decisao" not in r.text and "btn-ok" not in r.text  # nada para decidir sem atribuicao
+    assert "Aguardando decisão" not in r.text and "btn-ok" not in r.text  # nada para decidir sem atribuicao
     assert c.post(f"/painel/documentos/{DOC_ID}/decisao", data={"acao": "aprovar", "protocolo": PROTOCOLO}).status_code == 404
     assert fake.decisoes == []
 
@@ -297,10 +297,10 @@ def test_assumir_chamado_pela_tela_atribui_na_api_e_libera_os_documentos():
     c, fake = logado()
     fake.sem_atribuicao = True
     antes = c.get(f"/painel/chamado/{PROTOCOLO}/detalhe").text
-    assert "Assumir este chamado" in antes and "Aguardando decisao" not in antes
+    assert "Assumir este chamado" in antes and "Aguardando decisão" not in antes
     r = c.post(f"/painel/chamado/{PROTOCOLO}/atribuir", headers={"HX-Request": "true"})
     assert r.status_code == 200 and r.headers["hx-trigger"] == "atualizarFila" and fake.atribuicoes == [{}]
-    assert "Aguardando decisao" in r.text and "Assumir este chamado" not in r.text  # estado novo veio da API
+    assert "Aguardando decisão" in r.text and "Assumir este chamado" not in r.text  # estado novo veio da API
     assert "Atribuido a Rita RH por Rita RH" in r.text  # auditoria visivel na linha do tempo
     assert "<html" not in r.text
 
@@ -317,12 +317,12 @@ def test_assumir_chamado_sem_javascript_redireciona_e_exige_sessao():
 
 
 def test_atribuicao_negada_pela_api_mostra_aviso_e_nao_libera_documentos():
-    for status, trecho in ((403, "papel nao permite"), (409, "nao pode ser atribuido")):
+    for status, trecho in ((403, "papel não permite"), (409, "não pode ser atribuído")):
         c, fake = logado()
         fake.sem_atribuicao = True
         fake.atribuicao_status = status
         r = c.post(f"/painel/chamado/{PROTOCOLO}/atribuir", headers={"HX-Request": "true"})
-        assert r.status_code == 200 and trecho in r.text and "Aguardando decisao" not in r.text
+        assert r.status_code == 200 and trecho in r.text and "Aguardando decisão" not in r.text
         assert c.post(f"/painel/chamado/{PROTOCOLO}/atribuir").status_code == status  # sem HTMX: o mesmo codigo
 
 

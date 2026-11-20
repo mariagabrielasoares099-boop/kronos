@@ -1,0 +1,11 @@
+<section id="hr-documents">
+  <div class="hr-section-heading"><h3>Auditoria de documentos</h3><span class="hr-ai-tag">Conferência humana</span></div>
+  <p class="hr-muted">O status abaixo vem do chamado. OCR ainda não executado; nenhum dado foi extraído automaticamente.</p>
+  {% if erro %}<p class="hr-alert" role="alert">{{ erro }}</p>{% endif %}
+  {% if chamado.docs_indisponiveis %}<p class="hr-alert">Você não está atribuído a este chamado. Assuma o chamado para acessar os documentos.</p><form method="post" action="/rh/chamados/{{ chamado.protocolo }}/atribuir" hx-post="/rh/chamados/{{ chamado.protocolo }}/atribuir" hx-target="#workspace-detail" hx-indicator="#doc-loading"><button>Assumir este chamado</button></form>
+  {% else %}{% for item in checklist %}<article class="hr-document"><div class="hr-doc-top"><span class="hr-doc-icon" aria-hidden="true">▤</span><div><h4>{{ tipos[item.tipo] }}</h4><small>{{ 'Arquivo recebido' if item.doc else 'Aguardando envio do candidato' }}</small></div><span class="hr-doc-status hr-doc-{{ item.status|lower }}">{{ {'FALTANDO':'Faltando', 'PENDENTE':'Em análise', 'APROVADO':'Aprovado', 'RECUSADO':'Recusado'}.get(item.status, item.status) }}</span></div>
+  {% if item.doc %}{% if api %}<a class="hr-file-link" href="/painel/chamado/{{ chamado.protocolo }}/documentos/{{ item.doc.id }}/arquivo">Visualizar / baixar documento ↗</a>{% endif %}
+  {% if item.doc.motivo %}<p class="hr-muted">Motivo: {{ item.doc.motivo }}</p>{% endif %}
+  {% if item.doc.status == 'PENDENTE' %}<div class="hr-doc-actions"><form method="post" action="/rh/chamados/{{ chamado.protocolo }}/documentos/{{ item.doc.id }}/decisao" hx-post="/rh/chamados/{{ chamado.protocolo }}/documentos/{{ item.doc.id }}/decisao" hx-target="#hr-documents" hx-swap="outerHTML" hx-indicator="#doc-loading"><input type="hidden" name="acao" value="aprovar"><button class="hr-approve">✓ Aprovar</button></form><button type="button" class="hr-reject" hx-get="/rh/chamados/{{ chamado.protocolo }}/recusa?doc_id={{ item.doc.id }}" hx-target="#hr-dialog" hx-indicator="#doc-loading">Recusar documento</button></div>{% endif %}{% endif %}</article>{% endfor %}{% endif %}
+  <span id="doc-loading" class="htmx-indicator hr-loading" role="status">Processando solicitação…</span>
+</section>

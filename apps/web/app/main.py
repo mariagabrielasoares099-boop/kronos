@@ -1,4 +1,7 @@
+import hashlib
+import hmac
 import re
+import secrets
 import time
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +23,11 @@ from .gateway import (
     Documento, Gateway,
 )
 from .security import RateLimiter, SecurityHeadersMiddleware
+from .routers.apoio import mount_apoio
+from .routers.hr import mount_hr
+from .services.ollama import OllamaClient, cliente_de
+from .services.rag import BaseConhecimento
+from .services.uso import MedidorUso
 from .validators import is_valid_cpf, is_valid_email, only_digits
 
 BASE = Path(__file__).parent
@@ -33,9 +41,13 @@ SLA_LABELS = {"atrasado": "Atrasado", "vencendo": "Vence em 24h", "no_prazo": "N
 
 
 def create_app(
-    settings: Settings | None = None, gateway: Gateway | None = None, api: ApiClient | None = None
+    settings: Settings | None = None, gateway: Gateway | None = None, api: ApiClient | None = None,
+    conhecimento: BaseConhecimento | None = None, ollama: OllamaClient | None = None,
+    medidor: MedidorUso | None = None,
 ) -> FastAPI:
     cfg = settings or load_settings()
+    expo = cfg.demo_mode and cfg.expo_login  # login de teste para exposicao (so com dados ficticios)
+    segredo_expo = (cfg.session_secret or secrets.token_urlsafe(32)).encode()
     gw: Gateway = gateway or DemoGateway()  # vagas/candidatura/painel ainda so no demo
     # Fora do demo, o chamado e os documentos do candidato vem da API real (token do candidato no cookie).
     portal_api: ApiClient | None = api or (None if cfg.demo_mode else ApiClient(cfg.api_base_url))
@@ -47,7 +59,7 @@ def create_app(
     app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
     def render(request: Request, name: str, status_code: int = 200, **ctx) -> HTMLResponse:
-        ctx.update(demo=cfg.demo_mode, api=portal_api is not None and not cfg.demo_mode, labels=STATUS_LABELS, tipos=TIPOS_DOCUMENTO)
+        ctx.update(demo=cfg.demo_mode, expo=expo, api=portal_api is not None and not cfg.demo_mode, labels=STATUS_LABELS, tipos=TIPOS_DOCUMENTO)
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
     @app.get("/favicon.ico", include_in_schema=False)
@@ -85,7 +97,7 @@ def create_app(
         consentimento: str = Form(""),
     ):
         if not cfg.demo_mode:
-            raise HTTPException(503, "Candidatura indisponivel: integracao com a API ainda nao implementada.")
+            raise HTTPException(503, "Candidatura indisponível: integração com a API ainda não implementada.")
         v = gw.obter_vaga(vaga_id)
         if not v:
             raise HTTPException(404)
@@ -96,9 +108,9 @@ def create_app(
         if len(nome.strip()) < 3:
             erros["nome"] = "Informe seu nome completo."
         if not is_valid_email(email):
-            erros["email"] = "E-mail invalido."
+            erros["email"] = "E-mail inválido."
         if not is_valid_cpf(cpf):
-            erros["cpf"] = "CPF invalido."
+            erros["cpf"] = "CPF inválido."
         if consentimento != "on":
             erros["consentimento"] = "E necessario aceitar o tratamento dos dados."
         if erros:
@@ -145,10 +157,10 @@ def create_app(
             ch = portal_api.obter_chamado(protocolo, token)
             docs = portal_api.listar_documentos(ch["id"], token) if ch else None
         except ApiIndisponivel:
-            raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+            raise HTTPException(502, "Serviço indisponível. Tente novamente em instantes.")
         if ch is None or docs is None:
             # Token expirado ou chamado de outra pessoa: mesma resposta, sem distinguir.
-            return pagina_entrar(request, protocolo, "Sua sessao expirou. Peca um novo link de acesso.", 401, limpar=True)
+            return pagina_entrar(request, protocolo, "Sua sessão expirou. Peça um novo link de acesso.", 401, limpar=True)
         c = Chamado(ch["protocolo"], ch["jobId"], "", ch["status"])
         return render_chamado(request, c, itens_api(docs), None, status_code, erro)
 
@@ -175,13 +187,13 @@ def create_app(
         if not limiter.allow(f"link:{ip}"):
             raise HTTPException(429, "Muitas tentativas. Aguarde um minuto.")
         if not is_valid_cpf(cpf):
-            return pagina_entrar(request, protocolo, "CPF invalido.", 422)
+            return pagina_entrar(request, protocolo, "CPF inválido.", 422)
         try:
             portal_api.solicitar_link(protocolo, only_digits(cpf))
         except ArquivoInvalido as e:  # a API limitou os pedidos (429)
             return pagina_entrar(request, protocolo, str(e), e.status_code)
         except ApiIndisponivel:
-            raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+            raise HTTPException(502, "Serviço indisponível. Tente novamente em instantes.")
         return pagina_entrar(request, protocolo, enviado=True)
 
     @app.get("/chamado/{protocolo}/acesso/{codigo}", response_class=HTMLResponse)
@@ -205,9 +217,9 @@ def create_app(
         except ArquivoInvalido as e:  # a API limitou as tentativas (429)
             return pagina_entrar(request, protocolo, str(e), e.status_code)
         except ApiIndisponivel:
-            raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+            raise HTTPException(502, "Serviço indisponível. Tente novamente em instantes.")
         if sessao is None:
-            return pagina_entrar(request, protocolo, "Link invalido, vencido ou ja usado. Peca um novo link.", 401)
+            return pagina_entrar(request, protocolo, "Link inválido, vencido ou já usado. Peça um novo link.", 401)
         resp = RedirectResponse(f"/chamado/{protocolo}", status_code=303)
         resp.set_cookie(
             COOKIE_SESSAO, sessao.token, max_age=max(sessao.expira_em - int(time.time()), 0),
@@ -262,28 +274,37 @@ def create_app(
             except ArquivoInvalido as e:
                 return await mostrar(e.status_code, str(e))
             except ApiIndisponivel:
-                raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+                raise HTTPException(502, "Serviço indisponível. Tente novamente em instantes.")
             if not gravado:
-                return pagina_entrar(request, protocolo, "Sua sessao expirou. Peca um novo link de acesso.", 401, limpar=True)
+                return pagina_entrar(request, protocolo, "Sua sessão expirou. Peça um novo link de acesso.", 401, limpar=True)
         return RedirectResponse(f"/chamado/{protocolo}", status_code=303)
+
+    # --- Login de exposicao: cookie assinado (HMAC) com validade; so existe com EXPO_LOGIN=true no modo demo ---
+    def _assinar_expo(exp: int) -> str:
+        return hmac.new(segredo_expo, f"expo|{exp}".encode(), hashlib.sha256).hexdigest()
+
+    def sessao_expo_valida(request: Request) -> bool:
+        exp, _, sig = request.cookies.get(COOKIE_EQUIPE, "").partition(".")
+        return exp.isdigit() and int(exp) > time.time() and hmac.compare_digest(sig, _assinar_expo(int(exp)))
 
     # --- Login da equipe (fora do demo): senha + 2FA na API; o token fica so em cookie HttpOnly ---
     def pagina_login(request: Request, email: str = "", erro: str | None = None, pede_2fa: bool = False,
                      status_code: int = 200):
-        resp = render(request, "login.html", status_code=status_code, email=email, erro=erro, pede_2fa=pede_2fa)
+        resp = render(request, "login.html", status_code=status_code, email=email, erro=erro, pede_2fa=pede_2fa,
+                      expo_email=cfg.expo_email, expo_senha=cfg.expo_senha)
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
     @app.get("/login", response_class=HTMLResponse)
     def login_form(request: Request):
-        if portal_api is None:
+        if portal_api is None and not expo:
             raise HTTPException(404)
         return pagina_login(request)
 
     @app.post("/login", response_class=HTMLResponse)
     def login(request: Request, email: str = Form("", max_length=320), senha: str = Form("", max_length=200),
               codigo: str = Form("", max_length=10)):
-        if portal_api is None:
+        if portal_api is None and not expo:
             raise HTTPException(404)
         ip = request.client.host if request.client else "?"
         if not limiter.allow(f"login:{ip}"):
@@ -291,22 +312,33 @@ def create_app(
         email = email.strip()
         if not is_valid_email(email) or not senha:
             return pagina_login(request, email, "Informe e-mail e senha.", status_code=422)
+        if portal_api is None:  # modo exposicao: conta de teste, sem 2FA
+            ok_email = hmac.compare_digest(email.lower().encode(), cfg.expo_email.lower().encode())
+            ok_senha = hmac.compare_digest(senha.encode(), cfg.expo_senha.encode())
+            if not (ok_email and ok_senha):
+                return pagina_login(request, email, "E-mail ou senha incorretos.", status_code=401)
+            validade = 8 * 3600
+            exp = int(time.time()) + validade
+            resp = RedirectResponse("/painel", status_code=303)
+            resp.set_cookie(COOKIE_EQUIPE, f"{exp}.{_assinar_expo(exp)}", max_age=validade, httponly=True,
+                            samesite="lax", secure=request.url.scheme == "https", path="/")
+            return resp
         try:
             sessao = portal_api.login_equipe(email, senha, codigo.strip())
         except LoginRecusado as e:
             if e.motivo == "codigo_2fa":
-                aviso = "Codigo invalido." if codigo.strip() else "Informe o codigo do aplicativo autenticador."
+                aviso = "Código inválido." if codigo.strip() else "Informe o código do aplicativo autenticador."
                 return pagina_login(request, email, aviso, pede_2fa=True, status_code=401)
             if e.motivo == "bloqueado":
                 return pagina_login(request, email, "Muitas tentativas. Aguarde alguns minutos.", status_code=429)
             if e.motivo == "sem_2fa":
-                return pagina_login(request, email, "Sua conta ainda nao tem 2FA configurado. Fale com o administrador.",
+                return pagina_login(request, email, "Sua conta ainda não tem 2FA configurado. Fale com o administrador.",
                                     status_code=403)
             # Generico: nao revela se o e-mail existe nem se o codigo ou a senha falhou.
-            return pagina_login(request, email, "E-mail, senha ou codigo incorretos.", pede_2fa=bool(codigo.strip()),
+            return pagina_login(request, email, "E-mail, senha ou código incorretos.", pede_2fa=bool(codigo.strip()),
                                 status_code=401)
         except ApiIndisponivel:
-            raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+            raise HTTPException(502, "Serviço indisponível. Tente novamente em instantes.")
         resp = RedirectResponse("/painel", status_code=303)
         resp.set_cookie(
             COOKIE_EQUIPE, sessao.token, max_age=max(sessao.expira_em - int(time.time()), 0),
@@ -316,7 +348,7 @@ def create_app(
 
     @app.post("/sair")
     def sair():
-        resp = RedirectResponse("/login" if portal_api is not None else "/", status_code=303)
+        resp = RedirectResponse("/login" if (portal_api is not None or expo) else "/", status_code=303)
         resp.delete_cookie(COOKIE_EQUIPE, path="/")
         return resp
 
@@ -339,6 +371,8 @@ def create_app(
     def token_equipe(request: Request) -> str | None:
         """Demo: sem token (nao ha login). API: exige o cookie da equipe, senao vai para /login."""
         if cfg.demo_mode:
+            if expo and not sessao_expo_valida(request):
+                raise _Login()
             return None
         token = sessao_equipe(request)
         if portal_api is None or not token:
@@ -352,9 +386,9 @@ def create_app(
         except SessaoExpirada:
             raise _Login()
         except SemPermissao:
-            raise HTTPException(403, "Seu papel nao permite esta acao.")
+            raise HTTPException(403, "Seu papel não permite esta ação.")
         except ApiIndisponivel:
-            raise HTTPException(502, "Servico indisponivel. Tente novamente em instantes.")
+            raise HTTPException(502, "Serviço indisponível. Tente novamente em instantes.")
 
     def chamado_de_api(dados: dict) -> Chamado:
         r = dados["resumo"]
@@ -373,8 +407,8 @@ def create_app(
 
     @app.get("/painel", response_class=HTMLResponse)
     def painel(request: Request):
+        token_equipe(request)  # demo aberto: devolve None; com login de exposicao ou API real: exige sessao
         if not cfg.demo_mode:
-            token_equipe(request)
             return RedirectResponse("/painel/fila", status_code=303)
         colunas = {s: [] for s in STATUSES}
         for c in gw.listar_chamados():
@@ -389,7 +423,7 @@ def create_app(
 
     def montar_fila(request: Request, status: str, busca: str) -> dict:
         if status and status not in STATUS_LABELS:
-            raise HTTPException(422, "Status invalido")
+            raise HTTPException(422, "Status inválido")
         token = token_equipe(request)
         if token is None:
             itens = filtrar(gw.listar_chamados(), status, busca)
@@ -445,7 +479,7 @@ def create_app(
                           motivo: str = Form("", max_length=500), protocolo: str = Form("", max_length=20)):
         token = token_equipe(request)
         if acao not in ("aprovar", "recusar"):
-            raise HTTPException(422, "Acao invalida")
+            raise HTTPException(422, "Ação inválida")
         if token is None:
             achado = gw.obter_documento(doc_id)
             if not achado:
@@ -458,17 +492,17 @@ def create_app(
             if not any(d.id == doc_id for d in c.documentos):
                 raise HTTPException(404)  # o documento tem de ser deste chamado
         if acao == "recusar" and len(motivo.strip()) < 3:
-            return render_docs(request, c, "Informe o motivo da recusa (minimo 3 caracteres).")
+            return render_docs(request, c, "Informe o motivo da recusa (mínimo 3 caracteres).")
         if token is None:
             if gw.decidir_documento(doc_id, acao == "aprovar", motivo) is None:
-                return render_docs(request, c, "Este documento ja foi decidido.")
+                return render_docs(request, c, "Este documento já foi decidido.")
             return render_docs(request, c)
         erro = None
         try:
             if not chamar_equipe(portal_api.decidir_documento, doc_id, acao == "aprovar", motivo, token):
                 raise HTTPException(404)
         except Conflito:
-            erro = "Este documento ja foi decidido."
+            erro = "Este documento já foi decidido."
         return render_docs(request, carregar_chamado(token, protocolo), erro)  # estado novo vem da API
 
     @app.get("/painel/chamado/{protocolo}/documentos/{doc_id}/arquivo")
@@ -506,11 +540,11 @@ def create_app(
             if not chamar_equipe(portal_api.atribuir, dados["resumo"]["id"], token):
                 raise HTTPException(404)
         except Conflito:
-            erro = "Voce nao pode ser atribuido a este chamado."
+            erro = "Você não pode ser atribuído a este chamado."
         except HTTPException as e:
             if e.status_code != 403:
                 raise
-            erro = "Seu papel nao permite atribuir chamados."
+            erro = "Seu papel não permite atribuir chamados."
         if not request.headers.get("hx-request"):
             if erro:
                 raise HTTPException(403 if "papel" in erro else 409, erro)
@@ -527,7 +561,7 @@ def create_app(
         erro = None
         if token is None:
             if gw.avancar(protocolo) is None:
-                erro = "Este chamado nao pode avancar."
+                erro = "Este chamado não pode avançar."
         else:
             if not PROTOCOLO_RE.match(protocolo):
                 raise HTTPException(404)
@@ -538,7 +572,7 @@ def create_app(
                 if not chamar_equipe(portal_api.avancar, dados["resumo"]["id"], token):
                     raise HTTPException(404)
             except Conflito:
-                erro = "Este chamado nao pode avancar."
+                erro = "Este chamado não pode avançar."
         if not htmx:
             if erro:
                 raise HTTPException(409, erro)
@@ -548,6 +582,11 @@ def create_app(
         resp.headers["HX-Trigger"] = "atualizarFila"  # a linha da fila mostra o status novo
         return resp
 
+    mount_hr(app, render=render, montar_fila=montar_fila, token_equipe=token_equipe,
+             carregar_chamado=carregar_chamado, contexto_detalhe=contexto_detalhe,
+             chamar_equipe=chamar_equipe, portal_api=portal_api, gw=gw)
+    mount_apoio(app, render=render, token_equipe=token_equipe, base=conhecimento or BaseConhecimento(),
+                ollama=ollama or cliente_de(cfg), medidor=medidor or MedidorUso(), limiter=limiter)
     return app
 
 

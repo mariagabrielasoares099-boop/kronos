@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Base de conhecimento · KRONOS{% endblock %}
+{% block content %}
+<h1>Base de conhecimento</h1>
+<p class="lead">Pergunte sobre as políticas do RH (documentos .md, .txt e .pdf). A resposta usa só os documentos ingeridos e cita a fonte. A decisão continua sendo de uma pessoa.</p>
+<p class="muted">{{ contagem.fontes }} documento(s), {{ contagem.trechos }} trecho(s){% if contagem.trechos and contagem.com_embeddings == contagem.trechos %}, busca por significado (Ollama){% elif contagem.trechos %}, busca por palavras-chave{% endif %}.</p>
+{% if not contagem.trechos %}
+<p class="alerta info">A base está vazia. Rode <code>python -m app.services.rag_ingest</code> na pasta <code>apps/web</code> para ingerir <code>docs/conhecimento</code>.</p>
+{% endif %}
+<form method="post" action="/rh/conhecimento" class="form ap-form">
+  <label for="pergunta">Pergunta
+    <input id="pergunta" name="pergunta" value="{{ pergunta }}" maxlength="500" required autocomplete="off" placeholder="Ex.: quando devo recusar um comprovante de residência?">
+  </label>
+  {% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
+  <button type="submit">Perguntar</button>
+</form>
+{% if resultado %}
+<section class="card ap-resposta" aria-live="polite">
+  <h2>Resposta</h2>
+  <p class="ap-texto">{{ resultado.resposta }}</p>
+  <p class="muted">{% if resultado.modo == 'ollama' %}Gerada pelo Ollama a partir dos trechos abaixo.{% else %}Sem geração de IA: trechos encontrados na base.{% endif %}</p>
+  {% if resultado.fontes %}
+  <h3>Fontes</h3>
+  <ol class="ap-fontes">
+    {% for f in resultado.fontes %}
+    <li><strong>{{ f.fonte }}</strong> <span class="muted">(trecho {{ f.ordem + 1 }})</span><blockquote>{{ f.texto }}</blockquote></li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
