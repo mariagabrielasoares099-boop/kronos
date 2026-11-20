@@ -15,6 +15,8 @@ const base = z.object({
   /** Servidor SMTP (ex.: smtp://localhost:1025 para o Mailpit do docker-compose). Sem ele, so fora de producao: o e-mail vai para o log. */
   SMTP_URL: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(3).default('KRONOS <nao-responda@kronos.local>'),
+  /** Pasta dos arquivos enviados (disco local). Fora do repositorio e sem acesso publico. */
+  STORAGE_DIR: z.string().min(1).default('./storage'),
 });
 const schema = base.refine((e) => e.NODE_ENV !== 'production' || !!e.SMTP_URL, {
   message: 'SMTP_URL e obrigatoria em producao (o link de acesso do candidato vai por e-mail)',

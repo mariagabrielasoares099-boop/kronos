@@ -38,6 +38,10 @@ Limite próprio: 5 tentativas por minuto por IP. O código TOTP (6 dígitos, 30 
 | GET | `/chamados/:id/eventos` | equipe | `200` linha do tempo / `404` |
 | POST | `/chamados/:id/atribuicao` | RECRUTADOR, DP | `200` atribuído (ou já estava) / `400` / `404` / `409` |
 | POST | `/chamados/:id/transicoes` | RECRUTADOR, DP | `200` / `409` |
+| POST | `/chamados/:id/documentos` | candidato do chamado ou equipe atribuída (RLS) | `201` / `400` / `404` / `409` / `413` |
+| GET | `/chamados/:id/documentos` | candidato do chamado ou equipe atribuída (RLS) | `200` documentos + checklist |
+| GET | `/documentos/:id/arquivo` | candidato do chamado ou equipe atribuída (RLS) | `200` arquivo como anexo |
+| PATCH | `/documentos/:id` | RECRUTADOR, DP atribuídos ao chamado | `200` / `409` já decidido |
 
 ### Painel da equipe no portal web
 
@@ -101,6 +105,14 @@ completo de `/chamado/*/acesso/*` no servidor, proxy ou APM; configurar redaçã
 antes de publicar. As páginas do chamado usam `Cache-Control: no-store` e `Referrer-Policy: no-referrer`.
 
 Chamado sem permissão de leitura responde `404`, igual a chamado inexistente.
+
+### Documentos
+
+- **Envio:** `multipart/form-data` com `tipo` (`RG`, `CPF`, `COMPROVANTE_RESIDENCIA`, `CTPS`, `FOTO_3X4`, `OUTRO`) e o arquivo no campo `arquivo`. Até 5 MB (`413` acima disso). Só JPG, PNG ou PDF, conferidos pelo conteúdo: um HTML renomeado para `.pdf` recebe `400`. Até 30 documentos por chamado. Todo documento nasce `PENDENTE`.
+- **Quem acessa:** o próprio candidato e a equipe **atribuída** ao chamado (`ticket_assignments`). Quem só tem vínculo com a empresa, mas não foi atribuído, recebe `404`. A atribuição será feita pela fila do RH (M1.3).
+- **Checklist:** por enquanto é o mesmo para toda vaga (RG, CPF e comprovante de residência). Cada item mostra a situação do envio mais recente daquele tipo, ou `FALTANDO`.
+- **Download:** sempre como anexo, com `Cache-Control: private, no-store`. Não existe URL pública; o arquivo fica em `STORAGE_DIR` (disco local).
+- **Decisão:** `{"acao":"APROVAR"}` ou `{"acao":"RECUSAR","motivo":"..."}`. Cada decisão vira um evento na trilha do chamado (`DOCUMENTO_APROVADO` ou `DOCUMENTO_RECUSADO`). Documento recusado não é editado: o candidato envia um novo.
 Erros `400` trazem `erros: [{ campo, problema }]`, nunca o valor recebido (pode ser dado pessoal).
 
 ### Limitação conhecida do M1: um candidato por CPF

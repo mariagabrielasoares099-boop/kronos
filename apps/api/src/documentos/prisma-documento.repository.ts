@@ -1,78 +1,83 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DbContext } from '../db/db-context.js';
 import { DbService, Tx } from '../db/db.service.js';
-import { Documento, type MimeDocumento, type StatusDocumento, type TipoDocumento } from '../domain/documento.js';
-import { EnvioNegadoError, type DocumentoRepository, type DocumentosUnitOfWork } from './documento.repository.js';
+import { Documento, MimeDocumento, StatusDocumento, TipoDocumento } from '../domain/documento.js';
+import type { DocumentoRepository, DocumentosUnitOfWork, EventoDecisao } from './documento.repository.js';
 
-type Linha = NonNullable<Awaited<ReturnType<Tx['document']['findFirst']>>>;
+const COLUNAS = {
+  id: true, tenantId: true, ticketId: true, tipo: true, status: true, motivo: true, chaveStorage: true,
+  mime: true, tamanhoBytes: true, sha256: true, enviadoEm: true, revisadoPor: true,
+} as const;
 
+type Linha = {
+  id: string; tenantId: string; ticketId: string; tipo: string; status: string; motivo: string | null;
+  chaveStorage: string; mime: string; tamanhoBytes: number; sha256: string; enviadoEm: Date; revisadoPor: string | null;
+};
+
+/** Os valores ja sao garantidos pelos CHECKs da tabela. */
 const paraDominio = (l: Linha): Documento =>
   Documento.reconstituir({
     id: l.id, tenantId: l.tenantId, chamadoId: l.ticketId, tipo: l.tipo as TipoDocumento,
-    status: l.status as StatusDocumento, motivo: l.motivo, chaveStorage: l.chaveStorage,
-    mime: l.mime as MimeDocumento, tamanhoBytes: l.tamanhoBytes, sha256: l.sha256,
-    enviadoEm: l.enviadoEm, revisadoPor: l.revisadoPor,
+    status: l.status as StatusDocumento, motivo: l.motivo, chaveStorage: l.chaveStorage, mime: l.mime as MimeDocumento,
+    tamanhoBytes: l.tamanhoBytes, sha256: l.sha256, enviadoEm: l.enviadoEm, revisadoPor: l.revisadoPor,
   });
-
-/** Procura o SQLSTATE 42501 (insufficient_privilege) ou a mensagem do RLS na cadeia de causas do erro. */
-function violouRls(e: unknown, nivel = 0): boolean {
-  if (!e || typeof e !== 'object' || nivel > 5) return false;
-  const o = e as { code?: unknown; originalCode?: unknown; message?: unknown; cause?: unknown; meta?: unknown };
-  if (o.code === '42501' || o.originalCode === '42501') return true;
-  if (typeof o.message === 'string' && /row-level security|42501/i.test(o.message)) return true;
-  return violouRls(o.cause, nivel + 1) || violouRls(o.meta, nivel + 1) || violouRls((o.meta as { driverAdapterError?: unknown } | undefined)?.driverAdapterError, nivel + 1);
-}
 
 export class PrismaDocumentoRepository implements DocumentoRepository {
   constructor(private readonly tx: Tx) {}
 
-  async chamadoVisivel(chamadoId: string): Promise<boolean> {
-    // Ver o chamado nao basta: documentos exigem atribuicao da equipe.
-    // Usa as mesmas funcoes da politica RLS antes de gravar qualquer arquivo.
-    const [acesso] = await this.tx.$queryRaw<{ permitido: boolean }[]>`
-      SELECT (
-        (staff_sees_ticket(${chamadoId}::uuid) AND is_assigned(${chamadoId}::uuid))
-        OR candidate_owns_ticket(${chamadoId}::uuid)
-      ) AS permitido
-    `;
-    return acesso?.permitido === true;
+  async podeAcessar(chamadoId: string): Promise<boolean> {
+    const r = await this.tx.$queryRaw<{ pode: boolean }[]>`
+      SELECT ((staff_sees_ticket(${chamadoId}::uuid) AND is_assigned(${chamadoId}::uuid))
+              OR candidate_owns_ticket(${chamadoId}::uuid)) AS pode`;
+    return r[0]?.pode === true;
   }
 
-  async inserir(doc: Documento): Promise<void> {
-    const s = doc.snapshot();
-    try {
-      await this.tx.document.create({
-        data: {
-          id: s.id, tenantId: s.tenantId, ticketId: s.chamadoId, tipo: s.tipo, status: s.status,
-          chaveStorage: s.chaveStorage, mime: s.mime, tamanhoBytes: s.tamanhoBytes, sha256: s.sha256, enviadoEm: s.enviadoEm,
-        },
-        select: { id: true },
-      });
-    } catch (e) {
-      // Equipe que ve o chamado mas nao esta atribuida a ele: o RLS barra o INSERT (42501).
-      if (violouRls(e)) throw new EnvioNegadoError();
-      throw e;
-    }
+  contarPorChamado(chamadoId: string): Promise<number> {
+    return this.tx.document.count({ where: { ticketId: chamadoId } });
+  }
+
+  async inserir(d: Documento): Promise<void> {
+    const s = d.snapshot();
+    await this.tx.document.create({
+      data: {
+        id: s.id, tenantId: s.tenantId, ticketId: s.chamadoId, tipo: s.tipo, status: s.status, motivo: s.motivo,
+        chaveStorage: s.chaveStorage, mime: s.mime, tamanhoBytes: s.tamanhoBytes, sha256: s.sha256,
+        enviadoEm: s.enviadoEm, revisadoPor: s.revisadoPor,
+      },
+      select: { id: true },
+    });
   }
 
   async listarPorChamado(chamadoId: string): Promise<Documento[]> {
-    const linhas = await this.tx.document.findMany({ where: { ticketId: chamadoId }, orderBy: { enviadoEm: 'asc' } });
+    const linhas = await this.tx.document.findMany({
+      where: { ticketId: chamadoId },
+      select: COLUNAS,
+      orderBy: [{ enviadoEm: 'asc' }, { id: 'asc' }],
+    });
     return linhas.map(paraDominio);
   }
 
-  async obterPorId(id: string): Promise<Documento | null> {
-    const l = await this.tx.document.findFirst({ where: { id } });
+  async obter(id: string): Promise<Documento | null> {
+    const l = await this.tx.document.findUnique({ where: { id }, select: COLUNAS });
     return l ? paraDominio(l) : null;
   }
 
-  async salvarDecisao(doc: Documento): Promise<boolean> {
-    const s = doc.snapshot();
-    // Otimista: so decide quem ainda encontra o documento PENDENTE.
+  async salvarDecisao(d: Documento, e: EventoDecisao): Promise<boolean> {
+    const s = d.snapshot();
+    // Otimista: so grava se ainda esta PENDENTE (dois revisores ao mesmo tempo nao sobrescrevem).
     const r = await this.tx.document.updateMany({
       where: { id: s.id, status: 'PENDENTE' },
       data: { status: s.status, motivo: s.motivo, revisadoPor: s.revisadoPor },
     });
-    return r.count === 1;
+    if (r.count === 0) return false;
+    await this.tx.ticketEvent.create({
+      data: {
+        tenantId: s.tenantId, ticketId: s.chamadoId, tipo: e.tipo, autor: e.autor, motivo: e.motivo,
+        payload: { documentoId: s.id, tipoDocumento: s.tipo }, createdAt: e.em,
+      },
+      select: { id: true },
+    });
+    return true;
   }
 }
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
@@ -9,181 +9,255 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assinarToken } from '../auth/token.js';
 import type { DbContext } from '../db/db-context.js';
+import { TAMANHO_MAXIMO_BYTES } from './arquivo.js';
+import { MAX_DOCUMENTOS_POR_CHAMADO } from './documentos.service.js';
 
 /**
- * Upload/download/decisao de documentos (HTTP + RLS) contra Postgres DESCARTAVEL:
- *   TEST_ADMIN_DATABASE_URL (administrador) e TEST_APP_DATABASE_URL (papel da API).
+ * Documentos ponta a ponta (Nest + multer + RLS + disco) contra Postgres DESCARTAVEL.
+ * Mesmas variaveis do teste de chamados: TEST_ADMIN_DATABASE_URL e TEST_APP_DATABASE_URL.
  */
 const ADMIN = process.env.TEST_ADMIN_DATABASE_URL;
 const APP = process.env.TEST_APP_DATABASE_URL;
 const SEGREDO = 'segredo-de-teste-com-mais-de-32-caracteres';
 const id = () => randomUUID();
 
-const PDF = Buffer.from('%PDF-1.7\nconteudo de teste');
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0]);
+const PDF = Buffer.from('%PDF-1.7\nconteudo de teste\n%%EOF');
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const HTML_DISFARCADO = Buffer.from('<html><script>alert(1)</script></html>');
 
-describe.skipIf(!ADMIN || !APP)('API de documentos (HTTP + RLS)', () => {
-  const T = id(), T2 = id(), rhA = id(), rhB = id(), rhOutroTenant = id(), gestor = id();
-  const matriz = id(), matriz2 = id(), jobA = id(), job2 = id(), cand = id(), cand2 = id(), cand3 = id();
-  const chamado = id(), chamado2 = id(), chamadoOutroCandidato = id();
+/** Contagem de arquivos no storage (para provar que nada fica orfao). */
+async function arquivosEm(dir: string): Promise<number> {
+  const tenants = await readdir(dir).catch(() => [] as string[]);
+  let n = 0;
+  for (const t of tenants) n += (await readdir(join(dir, t))).length;
+  return n;
+}
+
+describe.skipIf(!ADMIN || !APP)('API de documentos (HTTP + RLS + storage)', () => {
+  const T = id(), T2 = id();
+  const rhA = id(), rhB = id(), dp = id(), gestor = id(), adm = id(), rhOutro = id();
+  const matriz = id(), empresa2 = id(), jobA = id(), job2 = id();
 
   let admin: Client;
   let app: INestApplication;
   let http: ReturnType<typeof request>;
-  let dir: string;
+  let storageDir = '';
 
   const tok = (c: DbContext) => `Bearer ${assinarToken(c, SEGREDO)}`;
   const tRhA = tok({ tenantId: T, userId: rhA, role: 'RECRUTADOR' });
-  const tRhB = tok({ tenantId: T, userId: rhB, role: 'RECRUTADOR' }); // sem atribuicao ao chamado
-  const tOutroTenant = tok({ tenantId: T2, userId: rhOutroTenant, role: 'RECRUTADOR' });
+  const tRhB = tok({ tenantId: T, userId: rhB, role: 'RECRUTADOR' }); // mesma empresa, nao atribuido
+  const tDp = tok({ tenantId: T, userId: dp, role: 'DP' });
   const tGestor = tok({ tenantId: T, userId: gestor, role: 'GESTOR_VAGA' });
-  const tCand = tok({ tenantId: T, candidateId: cand });
-  const tCandOutro = tok({ tenantId: T, candidateId: cand3 });
+  const tAdmin = tok({ tenantId: T, userId: adm, role: 'ADMIN' });
+  const tOutroTenant = tok({ tenantId: T2, userId: rhOutro, role: 'RECRUTADOR' });
 
-  const enviar = (token: string, chamadoId: string, tipo: string, arq: Buffer, nome = 'rg.pdf') =>
-    http.post(`/chamados/${chamadoId}/documentos`).set('Authorization', token).field('tipo', tipo).attach('arquivo', arq, nome);
+  let chamado = '', chamado2 = '', tCandidato = '', tCandidato2 = '';
+
+  /** O trigger de atribuicao confere o vinculo usando o tenant da sessao (app_tenant()). */
+  const atribuir = async (ticket: string, ...users: string[]) => {
+    await admin.query(`SELECT set_config('app.tenant_id', $1, false)`, [T]);
+    for (const u of users) {
+      await admin.query(`INSERT INTO ticket_assignments (tenant_id, ticket_id, user_id) VALUES ($1,$2,$3)`, [T, ticket, u]);
+    }
+  };
+
+  const abrir = async (cpf: string) => {
+    const r = await http.post('/chamados').set('Authorization', tRhA).send({
+      jobId: jobA, candidato: { nome: 'Joana Lima', email: `j${cpf}@example.com`, cpf }, consentimentoLgpd: true,
+    }).expect(201);
+    const { rows } = await admin.query(`SELECT candidate_id FROM tickets WHERE id=$1`, [r.body.id]);
+    return { id: r.body.id as string, token: tok({ tenantId: T, candidateId: rows[0].candidate_id }) };
+  };
+
+  const enviar = (auth: string, chamadoId: string, tipo: string, conteudo: Buffer, nome = 'doc.pdf') =>
+    http.post(`/chamados/${chamadoId}/documentos`).set('Authorization', auth).field('tipo', tipo).attach('arquivo', conteudo, nome);
 
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'kronos-docs-'));
+    storageDir = await mkdtemp(join(tmpdir(), 'kronos-docs-'));
     process.env.DATABASE_URL = APP!;
     process.env.REDIS_URL = 'redis://localhost:6379';
     process.env.JWT_SECRET = SEGREDO;
     process.env.ENCRYPTION_KEY = 'k'.repeat(40);
     process.env.RATE_LIMIT_MAX = '1000';
-    process.env.STORAGE_DIR = dir;
+    process.env.STORAGE_DIR = storageDir;
 
     admin = new Client({ connectionString: ADMIN });
     await admin.connect();
     const q = (sql: string, p: unknown[] = []) => admin.query(sql, p);
-    await q(`INSERT INTO tenants (id, nome) VALUES ($1,'T'), ($2,'T2')`, [T, T2]);
-    for (const [u, t, n, r] of [
-      [rhA, T, 'rha', 'RECRUTADOR'], [rhB, T, 'rhb', 'RECRUTADOR'], [gestor, T, 'gestor', 'GESTOR_VAGA'], [rhOutroTenant, T2, 'rht2', 'RECRUTADOR'],
-    ] as const) {
-      await q(`INSERT INTO users (id, tenant_id, nome, email, role, password_hash) VALUES ($1,$2,$3,$4,$5,'x')`, [u, t, n, `${n}-${u}@t.com`, r]);
+    await q(`INSERT INTO tenants (id, nome) VALUES ($1, 'T'), ($2, 'T2')`, [T, T2]);
+    const usuarios = [[rhA, 'RECRUTADOR'], [rhB, 'RECRUTADOR'], [dp, 'DP'], [gestor, 'GESTOR_VAGA'], [adm, 'ADMIN']] as const;
+    for (const [u, r] of usuarios) {
+      await q(`INSERT INTO users (id, tenant_id, nome, email, role, password_hash) VALUES ($1,$2,'u',$3,$4,'x')`, [u, T, `${u}@t.com`, r]);
     }
-    await q(`INSERT INTO companies (id, tenant_id, cnpj, razao_social) VALUES ($1,$3,'11111111000111','A'), ($2,$4,'33333333000133','X')`, [matriz, matriz2, T, T2]);
-    await q(`INSERT INTO user_companies (tenant_id, user_id, company_id) VALUES ($1,$2,$3), ($1,$4,$3), ($5,$6,$7)`, [T, rhA, matriz, rhB, T2, rhOutroTenant, matriz2]);
-    await q(`INSERT INTO jobs (id, tenant_id, company_id, titulo) VALUES ($1,$3,$4,'va'), ($2,$5,$6,'v2')`, [jobA, job2, T, matriz, T2, matriz2]);
-    for (const [c, t, n, cpf] of [[cand, T, 'c1', '52998224725'], [cand3, T, 'c3', '11144477735'], [cand2, T2, 'c2', '39053344705']] as const) {
-      await q(`INSERT INTO candidates (id, tenant_id, cpf, nome, email, consentimento_lgpd) VALUES ($1,$2,$3,$4,$5, now())`, [c, t, cpf, n, `${n}@example.com`]);
+    await q(`INSERT INTO users (id, tenant_id, nome, email, role, password_hash) VALUES ($1,$2,'u',$3,'RECRUTADOR','x')`, [rhOutro, T2, `${rhOutro}@t.com`]);
+    await q(`INSERT INTO companies (id, tenant_id, cnpj, razao_social) VALUES ($1,$2,'11111111000111','A')`, [matriz, T]);
+    await q(`INSERT INTO companies (id, tenant_id, cnpj, razao_social) VALUES ($1,$2,'22222222000122','B')`, [empresa2, T2]);
+    for (const u of [rhA, rhB, dp, gestor, adm]) {
+      await q(`INSERT INTO user_companies (tenant_id, user_id, company_id) VALUES ($1,$2,$3)`, [T, u, matriz]);
     }
-    for (const [tk, t, p, j, c] of [
-      [chamado, T, 'ADM-2026-000001', jobA, cand], [chamadoOutroCandidato, T, 'ADM-2026-000002', jobA, cand3], [chamado2, T2, 'ADM-2026-000001', job2, cand2],
-    ] as const) {
-      await q(`INSERT INTO tickets (id, tenant_id, protocolo, job_id, candidate_id, status) VALUES ($1,$2,$3,$4,$5,'TRIAGEM')`, [tk, t, p, j, c]);
-    }
-    // Somente rhA esta atribuido ao chamado (documentos exigem vinculo com a empresa E atribuicao).
-    // A trigger de atribuicao consulta o vinculo pelo tenant da sessao.
-    await q(`SELECT set_config('app.tenant_id', $1, false)`, [T]);
-    await q(`INSERT INTO ticket_assignments (tenant_id, ticket_id, user_id) VALUES ($1,$2,$3)`, [T, chamado, rhA]);
+    await q(`INSERT INTO user_companies (tenant_id, user_id, company_id) VALUES ($1,$2,$3)`, [T2, rhOutro, empresa2]);
+    await q(`INSERT INTO jobs (id, tenant_id, company_id, titulo, fluxo) VALUES ($1,$2,$3,'va','{}')`, [jobA, T, matriz]);
+    await q(`INSERT INTO jobs (id, tenant_id, company_id, titulo, fluxo) VALUES ($1,$2,$3,'v2','{}')`, [job2, T2, empresa2]);
 
     const { AppModule } = await import('../app.module.js');
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = mod.createNestApplication();
     await app.init();
     http = request(app.getHttpServer());
+
+    const c1 = await abrir('529.982.247-25');
+    const c2 = await abrir('111.444.777-35');
+    chamado = c1.id; tCandidato = c1.token;
+    chamado2 = c2.id; tCandidato2 = c2.token;
+    await atribuir(chamado, rhA, dp, gestor);
+    await atribuir(chamado2, rhA);
   }, 90_000);
 
   afterAll(async () => {
     await app?.close();
     if (admin) {
       try {
-        await admin.query('ALTER TABLE ticket_events DISABLE TRIGGER ticket_events_immutable').catch(() => undefined);
-        for (const t of ['documents', 'ticket_assignments', 'ticket_events', 'tickets', 'jobs', 'candidates', 'user_companies', 'companies', 'users', 'protocol_counters']) {
-          await admin.query(`DELETE FROM ${t} WHERE tenant_id = ANY($1)`, [[T, T2]]).catch(() => undefined);
+        await admin.query('ALTER TABLE ticket_events DISABLE TRIGGER ticket_events_immutable');
+        for (const t of [T, T2]) {
+          await admin.query(`SELECT set_config('app.tenant_id', $1, false)`, [t]);
+          for (const tab of ['documents', 'ticket_assignments', 'ticket_events', 'tickets', 'jobs', 'candidates',
+            'user_companies', 'companies', 'users', 'protocol_counters']) {
+            await admin.query(`DELETE FROM ${tab} WHERE tenant_id = $1`, [t]).catch(() => undefined);
+          }
+          await admin.query('DELETE FROM tenants WHERE id = $1', [t]).catch(() => undefined);
         }
-        await admin.query('DELETE FROM tenants WHERE id = ANY($1)', [[T, T2]]).catch(() => undefined);
       } finally {
-        await admin.query('ALTER TABLE ticket_events ENABLE TRIGGER ticket_events_immutable').catch(() => undefined);
+        await admin.query('ALTER TABLE ticket_events ENABLE TRIGGER ticket_events_immutable');
         await admin.end();
       }
     }
-    if (dir) await rm(dir, { recursive: true, force: true });
+    if (storageDir) await rm(storageDir, { recursive: true, force: true });
   });
 
-  let docId = '';
+  let docRg = '';
 
-  it('exige token', async () => {
-    await http.get(`/chamados/${chamado}/documentos`).expect(401);
-    await http.post(`/chamados/${chamado}/documentos`).expect(401);
+  it('o candidato envia o proprio documento: nasce PENDENTE e a resposta nao expoe o storage', async () => {
+    const r = await enviar(tCandidato, chamado, 'RG', PDF).expect(201);
+    expect(r.body).toMatchObject({ chamadoId: chamado, tipo: 'RG', status: 'PENDENTE', motivo: null, mime: 'application/pdf', tamanhoBytes: PDF.length });
+    expect(JSON.stringify(r.body)).not.toMatch(/chave|storage|sha256/i);
+    docRg = r.body.id;
+    expect(await arquivosEm(storageDir)).toBe(1);
   });
 
-  it('candidato envia o proprio documento: PENDENTE, sem vazar a chave de storage', async () => {
-    const r = await enviar(tCand, chamado, 'RG', PDF).expect(201);
-    expect(r.body).toMatchObject({ tipo: 'RG', status: 'PENDENTE', mime: 'application/pdf', chamadoId: chamado });
-    expect(JSON.stringify(r.body)).not.toMatch(/chave|storage/i);
-    docId = r.body.id;
+  it('confere o tipo pelo conteudo, valida campos e exige o arquivo', async () => {
+    await enviar(tCandidato, chamado, 'RG', HTML_DISFARCADO, 'rg.pdf').expect(400);
+    await enviar(tCandidato, chamado, 'PASSAPORTE', PDF).expect(400);
+    await enviar(tCandidato, chamado, 'RG', Buffer.alloc(0)).expect(400);
+    await http.post(`/chamados/${chamado}/documentos`).set('Authorization', tCandidato).field('tipo', 'RG').expect(400);
+    await http.post(`/chamados/${chamado}/documentos`).set('Authorization', tCandidato)
+      .field('tipo', 'RG').field('status', 'APROVADO').attach('arquivo', PDF, 'a.pdf').expect(400);
+    await enviar(tCandidato, 'nao-e-uuid', 'RG', PDF).expect(400);
+    await http.post(`/chamados/${chamado}/documentos`).field('tipo', 'RG').attach('arquivo', PDF, 'a.pdf').expect(401);
+    expect(await arquivosEm(storageDir)).toBe(1);
   });
 
-  it('o tipo vem do conteudo, nao do nome nem do Content-Type', async () => {
-    const r = await enviar(tCand, chamado, 'CPF', PNG, 'foto.pdf').expect(201);
+  it('arquivo acima do limite responde 413 e nao grava nada', async () => {
+    const grande = Buffer.concat([PDF, Buffer.alloc(TAMANHO_MAXIMO_BYTES)]);
+    await enviar(tCandidato, chamado, 'CPF', grande).expect(413);
+    expect(await arquivosEm(storageDir)).toBe(1);
+  });
+
+  it('quem nao pode enviar recebe 404 e o arquivo nao fica orfao', async () => {
+    await enviar(tCandidato2, chamado, 'RG', PDF).expect(404); // candidato de outro chamado
+    await enviar(tRhB, chamado, 'RG', PDF).expect(404); // equipe sem atribuicao
+    await enviar(tAdmin, chamado, 'RG', PDF).expect(404);
+    await enviar(tOutroTenant, chamado, 'RG', PDF).expect(404);
+    await enviar(tRhA, id(), 'RG', PDF).expect(404); // chamado inexistente
+    expect(await arquivosEm(storageDir)).toBe(1);
+  });
+
+  it('a equipe atribuida tambem envia', async () => {
+    const r = await enviar(tRhA, chamado, 'CPF', PNG, 'cpf.png').expect(201);
     expect(r.body.mime).toBe('image/png');
   });
 
-  it('rejeita executavel disfarcado, arquivo vazio, acima do limite, tipo desconhecido e falta de arquivo', async () => {
-    await enviar(tCand, chamado, 'RG', Buffer.from('MZ\x90\x00'), 'x.pdf').expect(400);
-    await enviar(tCand, chamado, 'RG', Buffer.alloc(0)).expect(400);
-    await enviar(tCand, chamado, 'RG', Buffer.concat([PDF, Buffer.alloc(5 * 1024 * 1024)])).expect(413);
-    await enviar(tCand, chamado, 'PASSAPORTE', PDF).expect(400);
-    await http.post(`/chamados/${chamado}/documentos`).set('Authorization', tCand).field('tipo', 'RG').expect(400);
-  });
-
-  it('isolamento: outro candidato, outro tenant e equipe sem atribuicao nao enxergam nem enviam', async () => {
-    await enviar(tCandOutro, chamado, 'RG', PDF).expect(404);
-    await enviar(tOutroTenant, chamado, 'RG', PDF).expect(404);
-    await enviar(tRhB, chamado, 'RG', PDF).expect(404);
-    for (const t of [tCandOutro, tOutroTenant, tRhB]) {
+  it('lista com checklist; so equipe atribuida e o proprio candidato veem', async () => {
+    const r = await http.get(`/chamados/${chamado}/documentos`).set('Authorization', tRhA).expect(200);
+    expect(r.body.checklist).toEqual([
+      { tipo: 'RG', situacao: 'PENDENTE' },
+      { tipo: 'CPF', situacao: 'PENDENTE' },
+      { tipo: 'COMPROVANTE_RESIDENCIA', situacao: 'FALTANDO' },
+    ]);
+    expect(r.body.documentos.map((d: { tipo: string }) => d.tipo)).toEqual(['RG', 'CPF']);
+    await http.get(`/chamados/${chamado}/documentos`).set('Authorization', tCandidato).expect(200);
+    for (const t of [tRhB, tAdmin, tOutroTenant, tCandidato2]) {
       await http.get(`/chamados/${chamado}/documentos`).set('Authorization', t).expect(404);
-      await http.get(`/documentos/${docId}/arquivo`).set('Authorization', t).expect(404);
-      await http.patch(`/documentos/${docId}`).set('Authorization', t).send({ status: 'APROVADO' }).expect(t === tCandOutro ? 403 : 404); // candidato nem chega a consultar
     }
   });
 
-  it('lista com checklist (RG pendente, CPF pendente, comprovante faltando)', async () => {
-    const r = await http.get(`/chamados/${chamado}/documentos`).set('Authorization', tRhA).expect(200);
-    expect(r.body.documentos).toHaveLength(2);
-    expect(r.body.checklist).toEqual([
-      { tipo: 'RG', enviado: true, status: 'PENDENTE' },
-      { tipo: 'CPF', enviado: true, status: 'PENDENTE' },
-      { tipo: 'COMPROVANTE_RESIDENCIA', enviado: false, status: 'FALTANDO' },
-    ]);
-  });
-
-  it('download autenticado devolve os mesmos bytes, como anexo e sem sniffing', async () => {
-    const r = await http.get(`/documentos/${docId}/arquivo`).set('Authorization', tRhA).buffer(true).parse((res, cb) => {
-      const partes: Buffer[] = [];
-      res.on('data', (c: Buffer) => partes.push(c));
-      res.on('end', () => cb(null, Buffer.concat(partes)));
-    }).expect(200);
-    expect(Buffer.compare(r.body, PDF)).toBe(0);
-    expect(r.headers['content-type']).toContain('application/pdf');
-    expect(r.headers['content-disposition']).toMatch(/^attachment/);
-    expect(r.headers['x-content-type-options']).toBe('nosniff');
-  });
-
-  it('candidato nao decide; papel sem permissao recebe 403', async () => {
-    await http.patch(`/documentos/${docId}`).set('Authorization', tCand).send({ status: 'APROVADO' }).expect(403);
-    await http.patch(`/documentos/${docId}`).set('Authorization', tGestor).send({ status: 'APROVADO' }).expect(403);
-  });
-
-  it('valida a decisao: recusa exige motivo e campos extras sao rejeitados', async () => {
-    await http.patch(`/documentos/${docId}`).set('Authorization', tRhA).send({ status: 'RECUSADO' }).expect(400);
-    await http.patch(`/documentos/${docId}`).set('Authorization', tRhA).send({ status: 'APROVADO', revisadoPor: id() }).expect(400);
-    await http.patch(`/documentos/${docId}`).set('Authorization', tRhA).send({ status: 'PENDENTE' }).expect(400);
-  });
-
-  it('RH aprova; decidir de novo da 409; recusa grava o motivo', async () => {
-    const ok = await http.patch(`/documentos/${docId}`).set('Authorization', tRhA).send({ status: 'APROVADO' }).expect(200);
-    expect(ok.body).toMatchObject({ status: 'APROVADO', motivo: null });
-    await http.patch(`/documentos/${docId}`).set('Authorization', tRhA).send({ status: 'RECUSADO', motivo: 'ilegivel' }).expect(409);
-
-    const outro = await enviar(tCand, chamado, 'COMPROVANTE_RESIDENCIA', PDF).expect(201);
-    const rec = await http.patch(`/documentos/${outro.body.id}`).set('Authorization', tRhA).send({ status: 'RECUSADO', motivo: 'Conta antiga' }).expect(200);
-    expect(rec.body).toMatchObject({ status: 'RECUSADO', motivo: 'Conta antiga' });
-  });
-
-  it('id malformado vira 400 e inexistente vira 404', async () => {
+  it('download autenticado devolve o arquivo como anexo, sem cache; os demais recebem 404', async () => {
+    for (const t of [tCandidato, tRhA]) {
+      const r = await http.get(`/documentos/${docRg}/arquivo`).set('Authorization', t)
+        .buffer(true).parse((res, cb) => {
+          const partes: Buffer[] = [];
+          res.on('data', (c: Buffer) => partes.push(c));
+          res.on('end', () => cb(null, Buffer.concat(partes)));
+        })
+        .expect(200);
+      expect((r.body as Buffer).equals(PDF)).toBe(true);
+      expect(r.headers['content-type']).toMatch(/^application\/pdf/);
+      expect(r.headers['content-disposition']).toBe(`attachment; filename="documento-${docRg}.pdf"`);
+      expect(r.headers['cache-control']).toBe('private, no-store');
+      expect(r.headers['x-content-type-options']).toBe('nosniff');
+    }
+    for (const t of [tRhB, tAdmin, tOutroTenant, tCandidato2]) {
+      await http.get(`/documentos/${docRg}/arquivo`).set('Authorization', t).expect(404);
+    }
+    await http.get(`/documentos/${docRg}/arquivo`).expect(401);
     await http.get('/documentos/nao-e-uuid/arquivo').set('Authorization', tRhA).expect(400);
-    await http.get(`/documentos/${id()}/arquivo`).set('Authorization', tRhA).expect(404);
+  });
+
+  it('decidir e so do RH atribuido; recusa exige motivo', async () => {
+    const d = (corpo: object, auth = tRhA, doc = docRg) => http.patch(`/documentos/${doc}`).set('Authorization', auth).send(corpo);
+    await d({ acao: 'APROVAR' }, tCandidato).expect(403);
+    await d({ acao: 'APROVAR' }, tGestor).expect(403);
+    await d({ acao: 'APROVAR' }, tRhB).expect(404);
+    await d({ acao: 'APROVAR' }, tOutroTenant).expect(404);
+    await d({ acao: 'RECUSAR' }).expect(400);
+    await d({ acao: 'APROVAR', status: 'APROVADO' }).expect(400);
+    await d({ acao: 'APROVAR' }, tRhA, id()).expect(404);
+
+    const r = await d({ acao: 'RECUSAR', motivo: 'Foto ilegivel' }).expect(200);
+    expect(r.body).toMatchObject({ status: 'RECUSADO', motivo: 'Foto ilegivel' });
+    await d({ acao: 'APROVAR' }, tDp).expect(409); // ja decidido
+  });
+
+  it('a decisao entra na trilha do chamado com autor e motivo', async () => {
+    const { rows } = await admin.query(
+      `SELECT tipo, autor, motivo, payload FROM ticket_events WHERE ticket_id=$1 AND tipo LIKE 'DOCUMENTO_%'`, [chamado]);
+    expect(rows).toEqual([{ tipo: 'DOCUMENTO_RECUSADO', autor: rhA, motivo: 'Foto ilegivel', payload: { documentoId: docRg, tipoDocumento: 'RG' } }]);
+  });
+
+  it('reenvio apos recusa: o checklist passa a valer o envio mais novo', async () => {
+    const r = await enviar(tCandidato, chamado, 'RG', PNG, 'rg.png').expect(201);
+    await http.patch(`/documentos/${r.body.id}`).set('Authorization', tDp).send({ acao: 'APROVAR' }).expect(200);
+    const l = await http.get(`/chamados/${chamado}/documentos`).set('Authorization', tCandidato).expect(200);
+    expect(l.body.checklist[0]).toEqual({ tipo: 'RG', situacao: 'APROVADO' });
+    expect(l.body.documentos.find((x: { id: string }) => x.id === docRg).motivo).toBe('Foto ilegivel');
+  });
+
+  it('duas decisoes simultaneas: so uma vence', async () => {
+    const r = await enviar(tCandidato, chamado, 'COMPROVANTE_RESIDENCIA', PDF).expect(201);
+    const res = await Promise.all([tRhA, tDp].map((t) => http.patch(`/documentos/${r.body.id}`).set('Authorization', t).send({ acao: 'APROVAR' })));
+    expect(res.map((x) => x.status).sort((a, b) => a - b)).toEqual([200, 409]);
+    const { rows } = await admin.query(`SELECT count(*)::int AS n FROM ticket_events WHERE payload->>'documentoId' = $1`, [r.body.id]);
+    expect(rows[0].n).toBe(1);
+  });
+
+  it('limite de documentos por chamado responde 409 sem gravar arquivo', async () => {
+    await admin.query(`SELECT set_config('app.tenant_id', $1, false)`, [T]);
+    await admin.query(
+      `INSERT INTO documents (id, tenant_id, ticket_id, tipo, chave_storage, mime, tamanho_bytes, sha256)
+       SELECT gen_random_uuid(), $1, $2, 'OUTRO', 'x/' || g, 'application/pdf', 1, repeat('a', 64)
+       FROM generate_series(1, $3::int) g`,
+      [T, chamado2, MAX_DOCUMENTOS_POR_CHAMADO]);
+    const antes = await arquivosEm(storageDir);
+    await enviar(tCandidato2, chamado2, 'RG', PDF).expect(409);
+    expect(await arquivosEm(storageDir)).toBe(antes);
   });
 });

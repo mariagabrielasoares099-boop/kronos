@@ -7,8 +7,8 @@ import { AuthModule } from './auth/auth.module.js';
 import { ChamadosModule } from './chamados/chamados.module.js';
 import { parseEnv } from './config/env.js';
 import { DbModule } from './db/db.module.js';
-import { DocumentosModule } from './documentos/documentos.module.js';
 import { DocsController } from './docs/docs.controller.js';
+import { DocumentosModule } from './documentos/documentos.module.js';
 import { HealthController } from './health/health.controller.js';
 import { PortalModule } from './portal/portal.module.js';
 

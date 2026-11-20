@@ -7,9 +7,11 @@ export interface StoragePort {
   /** Grava e devolve uma chave opaca. */
   salvar(tenantId: string, conteudo: Buffer): Promise<string>;
   ler(chave: string): Promise<Buffer>;
-  /** Apaga o arquivo (usado para desfazer um envio que o banco recusou). Nao falha se ja nao existe. */
+  /** Apaga o arquivo; nao falha se ele ja nao existe. Desfaz um envio que o banco recusou. */
   remover(chave: string): Promise<void>;
 }
+
+export const STORAGE = Symbol('STORAGE');
 
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const CHAVE_RE = new RegExp(`^${UUID_PATTERN}/${UUID_PATTERN}$`);
