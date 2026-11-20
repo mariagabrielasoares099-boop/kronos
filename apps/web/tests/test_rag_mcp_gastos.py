@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 from fastapi.testclient import TestClient
 
-from app.config import Settings
+from app.config import Settings, load_settings
 from app.gateway import DemoGateway
 from app.main import create_app
 from app.services.ollama import OllamaClient
@@ -329,3 +329,75 @@ def test_ingestao_pela_tela_exige_login_no_modo_exposicao():
     c = TestClient(create_app(cfg, gateway=DemoGateway(), conhecimento=BaseConhecimento(":memory:")), follow_redirects=False)
     assert c.post("/rh/conhecimento/ingerir").status_code == 303
     assert c.get("/rh/conhecimento?aba=ingestao").status_code == 303
+
+
+# ---------- MCP por HTTP (POST /mcp) ----------
+def _rpc(c, metodo, params=None, mid=1, **kw):
+    return c.post("/mcp", json={"jsonrpc": "2.0", "id": mid, "method": metodo, **({"params": params} if params else {})}, **kw)
+
+
+def test_mcp_http_initialize_lista_e_chama_ferramentas():
+    c = app_demo(conhecimento=BaseConhecimento(":memory:"), ollama=ollama_fora())
+    assert _rpc(c, "initialize").json()["result"]["serverInfo"]["name"] == "kronos"
+    nomes = {t["name"] for t in _rpc(c, "tools/list").json()["result"]["tools"]}
+    assert nomes == {f["name"] for f in FERRAMENTAS}
+    r = _rpc(c, "tools/call", {"name": "consultar_chamado", "arguments": {"protocolo": "ADM-2026-000001"}}).json()["result"]
+    assert not r["isError"] and "ADM-2026-000001" in r["content"][0]["text"]
+    ruim = _rpc(c, "tools/call", {"name": "consultar_chamado", "arguments": {"protocolo": "../etc"}}).json()["result"]
+    assert ruim["isError"]
+
+
+def test_mcp_http_ve_os_chamados_vivos_do_servidor():
+    c = app_demo(conhecimento=BaseConhecimento(":memory:"), ollama=ollama_fora())
+    antes = len(json.loads(_rpc(c, "tools/call", {"name": "listar_chamados", "arguments": {}}).json()["result"]["content"][0]["text"])["chamados"])
+    c.post("/vagas/v1/candidatar", data={"nome": "Teste Mcp Http", "email": "m@exemplo.test", "cpf": "529.982.247-25", "consentimento": "on"})
+    depois = len(json.loads(_rpc(c, "tools/call", {"name": "listar_chamados", "arguments": {}}).json()["result"]["content"][0]["text"])["chamados"])
+    assert depois == antes + 1
+
+
+def test_mcp_http_notificacao_lote_e_erros_de_protocolo():
+    c = app_demo(conhecimento=BaseConhecimento(":memory:"), ollama=ollama_fora())
+    assert c.post("/mcp", json={"jsonrpc": "2.0", "method": "notifications/initialized"}).status_code == 202
+    lote = c.post("/mcp", json=[{"jsonrpc": "2.0", "id": 1, "method": "ping"}, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}]).json()
+    assert [r["id"] for r in lote] == [1, 2]
+    assert c.post("/mcp", content=b"{nao json").status_code == 400
+    assert c.post("/mcp", json=[]).status_code == 400
+    assert c.post("/mcp", json=[{"jsonrpc": "2.0", "id": i, "method": "ping"} for i in range(21)]).status_code == 400
+    assert c.post("/mcp", content=b"x" * 70000).status_code == 413
+    assert _rpc(c, "metodo/inexistente").json()["error"]["code"] == -32601
+    assert c.get("/mcp").status_code == 405
+
+
+def test_mcp_http_recusa_origem_de_outro_site():
+    c = app_demo(conhecimento=BaseConhecimento(":memory:"), ollama=ollama_fora())
+    assert _rpc(c, "ping", headers={"Origin": "https://site-malicioso.example"}).status_code == 403
+    assert _rpc(c, "ping", headers={"Origin": "http://testserver"}).status_code == 200
+
+
+def test_mcp_http_exige_sessao_na_exposicao_e_aceita_token_bearer():
+    token = "t" * 32
+    cfg = Settings("", True, "s" * 32, 30, 60, expo_login=True, mcp_token=token)
+    c = TestClient(create_app(cfg, gateway=DemoGateway(), conhecimento=BaseConhecimento(":memory:")), follow_redirects=False)
+    assert _rpc(c, "ping").status_code == 401
+    assert _rpc(c, "ping", headers={"Authorization": "Bearer errado"}).status_code == 401
+    assert _rpc(c, "ping", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    c.post("/login", data={"email": cfg.expo_email, "senha": cfg.expo_senha})
+    assert _rpc(c, "ping").status_code == 200  # sessao da equipe tambem vale
+
+
+def test_mcp_http_nao_existe_fora_do_modo_demo():
+    cfg = Settings("http://api.invalid", False, "s" * 32, 30, 60)
+    c = TestClient(create_app(cfg, conhecimento=BaseConhecimento(":memory:")), follow_redirects=False)
+    assert _rpc(c, "ping").status_code == 404
+
+
+def test_mcp_token_curto_e_recusado_na_configuracao():
+    import pytest
+    with pytest.raises(RuntimeError):
+        load_settings({"DEMO_MODE": "true", "MCP_TOKEN": "curto"})
+    assert load_settings({"DEMO_MODE": "true", "MCP_TOKEN": "a" * 24}).mcp_token == "a" * 24
+
+
+def test_aba_mcp_mostra_o_endereco_http():
+    html = app_demo(conhecimento=BaseConhecimento(":memory:"), ollama=ollama_fora()).get("/rh/conhecimento?aba=mcp").text
+    assert "POST /mcp" in html and "claude mcp add --transport http kronos http://testserver/mcp" in html

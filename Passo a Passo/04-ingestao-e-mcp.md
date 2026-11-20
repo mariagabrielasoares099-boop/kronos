@@ -7,7 +7,7 @@ Tudo é **local e gratuito**. Sem chave de API.
 - **Ingestão**: o passo que lê os documentos de política do RH da pasta `docs/conhecimento/` e os grava, em pedaços, numa base local.
 - **RAG**: a pergunta feita na tela busca os pedaços mais parecidos e responde **citando o documento**.
 - **Ollama** (opcional): programa de IA local. Com ele a busca é por significado e a resposta é escrita em texto corrido. Sem ele a busca é por palavras-chave e a tela mostra os trechos encontrados.
-- **MCP do KRONOS**: deixa o **Claude Code** consultar vagas, chamados e a base de conhecimento, só leitura.
+- **MCP do KRONOS**: deixa uma IA (como o **Claude Code**) consultar vagas, chamados e a base de conhecimento, só leitura. Funciona **dentro do servidor web** (HTTP) ou no computador de quem usa (stdio).
 
 ## Ingerir documentos
 
@@ -66,12 +66,39 @@ Aba **MCP do KRONOS** em `/rh/conhecimento` mostra as ferramentas e a configura�
 
 Todas são **somente leitura** e usam os **dados fictícios** do demo. Nenhuma cria, decide, apaga ou envia nada.
 
-### Conectar no Claude Code
+### Pelo servidor web (HTTP): `POST /mcp`
+
+O próprio servidor do KRONOS responde como MCP. Basta ele estar no ar; não precisa instalar nada no computador de quem consulta.
+
+```powershell
+claude mcp add --transport http kronos http://127.0.0.1:8000/mcp
+claude mcp list
+```
+
+| Regra | Detalhe |
+|---|---|
+| Quando existe | só com `DEMO_MODE=true` (dados fictícios); fora do demo responde 404 |
+| Dados | os chamados **vivos** do servidor: quem se candidata aparece na consulta |
+| Acesso | demo aberto: sem credencial. Com `EXPO_LOGIN=true`: exige a sessão da equipe ou o token |
+| Token | defina `MCP_TOKEN` (24+ caracteres) no servidor e registre com `--header "Authorization: Bearer SEU_TOKEN"` |
+| Proteções | recusa `Origin` de outro site, corpo acima de 64 KB e lote acima de 20 mensagens; 120 chamadas por minuto por IP |
+| Servidor remoto | use HTTPS (proxy) e **sempre** `MCP_TOKEN`; sem HTTPS o token trafega aberto |
+
+Teste sem o Claude Code:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/mcp -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+### No computador do usuário (stdio)
+
+Alternativa sem servidor web: o Claude Code inicia o `mcp_kronos.py` localmente. Nesse modo ele vê só os dados iniciais do demo, não os chamados criados no servidor.
 
 1. Abra o Claude Code **na pasta do projeto**. O arquivo `.mcp.json` da raiz já registra o servidor `kronos`.
 2. Aprove o servidor quando o Claude Code pedir.
 3. Confira com `claude mcp list`.
-4. Peça, por exemplo: "use o kronos para consultar o chamado ADM-2026-000001".
+
+Depois de conectar por qualquer um dos dois modos, peça, por exemplo: "use o kronos para consultar o chamado ADM-2026-000001".
 
 Se o `python` do PATH não for o do projeto, troque o campo `command` do `.mcp.json` pelo caminho do `python.exe` dentro de `apps/web/.venv`. O servidor funciona sem `httpx`; com o Ollama no ar ele usa a busca por significado.
 

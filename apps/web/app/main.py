@@ -587,7 +587,8 @@ def create_app(
              chamar_equipe=chamar_equipe, portal_api=portal_api, gw=gw)
     mount_apoio(app, render=render, token_equipe=token_equipe, base=conhecimento or BaseConhecimento(),
                 ollama=ollama or cliente_de(cfg), medidor=medidor or MedidorUso(), limiter=limiter,
-                pasta=conhecimento_pasta)
+                pasta=conhecimento_pasta, gateway=gw, mcp_ativo=cfg.demo_mode, mcp_token=cfg.mcp_token,
+                autorizado=lambda r: not expo or sessao_expo_valida(r))
     return app
 
 

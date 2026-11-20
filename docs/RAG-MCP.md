@@ -11,7 +11,7 @@ Tudo local e grátis. Sem chave de API, sem nuvem. Comandos a partir de `apps/we
 | Ingestão | `python -m app.services.rag_ingest` | Lê `docs/conhecimento/` (`.md`, `.txt` e `.pdf`) para a base |
 | Tela do RH | `/rh/conhecimento` | Pergunta e resposta com fontes |
 | Painel de uso | `/rh/gastos` | Consumo contra a cota do plano e custo (R$ 0,00 com IA local) |
-| Servidor MCP | `mcp_kronos.py` + `.mcp.json` | Deixa o Claude Code consultar vagas, chamados e a base (somente leitura) |
+| Servidor MCP | `mcp_kronos.py` + `.mcp.json` | Deixa uma IA consultar vagas, chamados e a base (somente leitura), por HTTP no servidor ou por stdio |
 
 ## Fluxo de ingestão
 
@@ -58,6 +58,8 @@ Variáveis (`.env.example`): `OLLAMA_URL` (padrão `http://localhost:11434`), `O
 ## Servidor MCP
 
 Ferramentas, todas **somente leitura** e com dados **fictícios do demo**: `listar_vagas`, `listar_chamados`, `consultar_chamado`, `buscar_conhecimento`, `resumo_uso`. Nenhuma cria, decide, apaga ou envia nada. O servidor fala JSON-RPC por stdin/stdout, sem dependência extra.
+
+**Dois transportes, o mesmo núcleo** (`app/services/mcp.py`): **stdio** (`mcp_kronos.py`, iniciado pelo Claude Code) e **HTTP** (`POST /mcp` no servidor web, só com `DEMO_MODE=true`). O HTTP enxerga os chamados vivos do servidor, recusa `Origin` de outro site, limita o corpo a 64 KB e aceita sessão da equipe ou `MCP_TOKEN` (Bearer, 24+ caracteres). Registro: `claude mcp add --transport http kronos http://127.0.0.1:8000/mcp`. Veja `Passo a Passo/04-ingestao-e-mcp.md`.
 
 O `.mcp.json` da raiz registra o servidor `kronos` para o Claude Code deste projeto (ele pede aprovação na primeira vez). Para conferir:
 

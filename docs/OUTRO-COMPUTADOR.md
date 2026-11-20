@@ -30,7 +30,7 @@ git push -u origin feat/portal-equipe
 ## 2. Clonar e subir o demo
 
 ```powershell
-git clone <URL-do-repositório> kronos
+git clone https://github.com/mariagabrielasoares099-boop/kronos.git kronos
 cd kronos
 git switch feat/portal-equipe
 

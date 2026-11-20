@@ -17,7 +17,7 @@ Há dois modos. Para apresentar ou testar, use o **modo demonstração** (só Py
 ### Windows (PowerShell)
 
 ```powershell
-git clone <URL-do-repositório> kronos
+git clone https://github.com/mariagabrielasoares099-boop/kronos.git kronos
 cd kronos
 git switch feat/portal-equipe
 
@@ -33,7 +33,7 @@ python -m uvicorn app.main:app --port 8000
 ### Mac ou Linux
 
 ```bash
-git clone <URL-do-repositório> kronos && cd kronos
+git clone https://github.com/mariagabrielasoares099-boop/kronos.git kronos && cd kronos
 git switch feat/portal-equipe
 cd apps/web
 python3 -m venv .venv && source .venv/bin/activate

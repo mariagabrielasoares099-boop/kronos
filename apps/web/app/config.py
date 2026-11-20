@@ -18,6 +18,8 @@ class Settings:
     expo_login: bool = False
     expo_email: str = "equipe.teste@exemplo.test"
     expo_senha: str = "kronos-expo-2026"
+    # Token opcional (Bearer) para clientes MCP remotos em POST /mcp. Vazio = so sessao/ demo aberto.
+    mcp_token: str = ""
 
 
 def load_settings(env: dict[str, str] | None = None) -> Settings:
@@ -29,6 +31,9 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
     api = e.get("API_BASE_URL", "")
     if not demo and not api:
         raise RuntimeError("API_BASE_URL e obrigatoria fora do modo demo")
+    mcp_token = e.get("MCP_TOKEN", "").strip()
+    if mcp_token and len(mcp_token) < 24:
+        raise RuntimeError("MCP_TOKEN precisa ter 24+ caracteres")
     return Settings(
         api_base_url=api,
         demo_mode=demo,
@@ -42,4 +47,5 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         expo_login=demo and e.get("EXPO_LOGIN", "false").lower() == "true",
         expo_email=e.get("EXPO_EMAIL", "equipe.teste@exemplo.test").strip(),
         expo_senha=e.get("EXPO_SENHA", "kronos-expo-2026"),
+        mcp_token=mcp_token,
     )

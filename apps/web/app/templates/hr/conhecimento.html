@@ -72,7 +72,7 @@
 {% endif %}
 
 {% else %}
-<p class="lead">O MCP do KRONOS deixa o Claude Code consultar vagas, chamados e esta base de conhecimento. Ele roda no computador de quem usa o Claude Code, não neste servidor web.</p>
+<p class="lead">O MCP do KRONOS deixa um assistente de IA (como o Claude Code) consultar vagas, chamados e esta base de conhecimento. Ele funciona de duas formas: <strong>por HTTP, neste servidor web</strong>, ou por <strong>stdio</strong>, rodando no computador de quem usa o Claude Code.</p>
 <ul class="ap-status">
   <li><strong>Acesso</strong> <span class="tag lime">somente leitura</span></li>
   <li><strong>Dados</strong> <span class="muted">fictícios do modo demonstração</span></li>
@@ -81,7 +81,18 @@
 <ul class="ap-ferramentas">
   {% for f in ferramentas %}<li><code>{{ f.nome }}</code> <span class="muted">{{ f.descricao }}</span></li>{% else %}<li class="muted">Lista indisponível: o servidor não foi iniciado a partir de <code>apps/web</code>.</li>{% endfor %}
 </ul>
-<h2>Como conectar</h2>
+<h2>Pelo servidor web (HTTP)</h2>
+{% if mcp_http %}
+<ul class="ap-status">
+  <li><strong>Endereço</strong> <code>POST /mcp</code> <span class="tag lime">ativo</span></li>
+  <li><strong>Acesso</strong> <span class="muted">{% if mcp_token_exigido %}token Bearer (<code>MCP_TOKEN</code>) ou sessão da equipe{% else %}aberto no demo; com o login de exposição, exige a sessão da equipe. Defina <code>MCP_TOKEN</code> para clientes remotos{% endif %}</span></li>
+</ul>
+<p>Qualquer cliente MCP que fale HTTP usa o mesmo endereço do servidor. No Claude Code:</p>
+<pre class="ap-codigo" tabindex="0">claude mcp add --transport http kronos {{ url_mcp }}{% if mcp_token_exigido %} --header "Authorization: Bearer SEU_TOKEN"{% endif %}</pre>
+{% else %}
+<p class="muted"><span class="tag">desligado</span> O MCP por HTTP só existe no modo demonstração (dados fictícios).</p>
+{% endif %}
+<h2>No computador do usuário (stdio)</h2>
 <ol class="ap-passos">
   <li>Abra o Claude Code na pasta do projeto. O arquivo <code>.mcp.json</code> da raiz já registra o servidor <code>kronos</code>.</li>
   <li>Aprove o servidor quando o Claude Code pedir e confira com <code>claude mcp list</code>.</li>
