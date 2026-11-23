@@ -4,6 +4,8 @@ ATS em que **cada candidato é um chamado** com protocolo único (ex.: `ADM-2026
 
 > Projeto de demonstração, sem comprador: usa apenas serviços gratuitos ou locais.
 
+▶️ **Vídeo de demonstração (31 s):** [assistir](<docs/video divulgação/KRONOS-walkthrough.mp4>)
+
 ## O problema
 O recrutamento acontece num lugar (Gupy, planilha, e-mail) e a admissão em outro (WhatsApp para pedir documentos, digitação manual na folha). O RH digita tudo duas vezes, perde documentos e não sabe em que etapa cada pessoa está.
 
