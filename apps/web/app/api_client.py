@@ -175,7 +175,7 @@ class ApiClient:
 
     def decidir_documento(self, doc_id: str, aprovar: bool, motivo: str, token: str) -> bool:
         """True quando gravado; False se o documento nao existe/nao e visivel. Conflito se ja decidido."""
-        corpo = {"status": "APROVADO"} if aprovar else {"status": "RECUSADO", "motivo": motivo.strip()}
+        corpo = {"acao": "APROVAR"} if aprovar else {"acao": "RECUSAR", "motivo": motivo.strip()}
         r = self._equipe("PATCH", f"/documentos/{doc_id}", token, json=corpo)
         if r.status_code == 404:
             return False
